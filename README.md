@@ -1,5 +1,5 @@
-# jpouverte
+# IA & Droit
 Annotation de la jurisprudence
 
-Ce dépot contient le code nécessaire au projet IA et droit mené par l'association OpenLaw.
+Ce dépôt contient le code nécessaire au projet [IA & droit](http://openlaw.fr/travaux/communs-numeriques/ia-droit-datasets-dapprentissage) mené par l'association [OpenLaw](http://openlaw.fr).
 
