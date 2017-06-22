@@ -9,6 +9,8 @@ Pour aider à l'annotation, ces documents sont disponibles :
 
 L'annotation doit se faire sur le serveur Brat à l'adresse http://52.208.15.169:8001
 
-Les décisions sont réparties en lots de 12 documents. Chaque lot contient 2 documents qui appartiennent au lot suivant (pour calculer l'inter-agreement et le [Cohen's kappa](https://en.wikipedia.org/wiki/Cohen%27s_kappa).
+Les décisions sont réparties en lots de 12 documents. Chaque lot contient 2 documents qui apparaissent aussi dans le lot suivant (pour calculer l'inter-agreement et le [Cohen's kappa](https://en.wikipedia.org/wiki/Cohen%27s_kappa). 
 
-L'affectation des lots se fait [ici](https://drive.google.com/open?id=11oDcMStUmdMv0x4BRBSOdFy8QJC6GNStArhux9Vz6Ak).
+Pour cette raison, **il est important que les lots soient affectés et traités dans l'ordre de leurs identifiants.**
+
+L'affectation des lots à chaque annotateur se fait [ici](https://drive.google.com/open?id=11oDcMStUmdMv0x4BRBSOdFy8QJC6GNStArhux9Vz6Ak).
