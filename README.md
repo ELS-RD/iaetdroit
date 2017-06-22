@@ -9,8 +9,7 @@ Pour aider à l'annotation, ces documents sont disponibles :
 
 L'annotation doit se faire sur le serveur Brat à l'adresse http://52.208.15.169:8001
 
-Login : **pommedeterresautee**  
-Pwd : **bonjour**
+Les logins / pwd : user1 / user1, user2 / user2,...
 
 Les décisions sont réparties en lots de 12 documents. Chaque lot contient 2 documents qui apparaissent aussi dans le lot suivant (pour calculer l'inter-agreement et le [Cohen's kappa](https://en.wikipedia.org/wiki/Cohen%27s_kappa). 
 
