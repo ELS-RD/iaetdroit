@@ -45,6 +45,7 @@ object LoadDecisionsToBratFiles extends App {
 
   private val files: Iterator[File] =
     Files
+    // TODO move to parameter file
       .find(Paths.get("/home/benesty_local/workspace/justice-data/data/juri/"),
             999,
             (path, bfa) => path.toString.endsWith(".xml"))
@@ -54,10 +55,6 @@ object LoadDecisionsToBratFiles extends App {
 
   Source
     .fromIterator(() => files)
-//    .map { f =>
-//      println(f); f
-//    }
-//    .take(200)
     .mapAsyncUnordered(workers) { file =>
       Future { AppealCourtContainer(file) }
     }
