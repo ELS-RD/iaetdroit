@@ -4,7 +4,9 @@
 
 Ce dépôt contient le code nécessaire au projet [IA & droit](http://openlaw.fr/travaux/communs-numeriques/ia-droit-datasets-dapprentissage) mené par l'association [OpenLaw](http://openlaw.fr).
 
-## Guide d'annotation
+**Sur les possibilités de mettre en place un atelier IA & Droit chez vous : [ICI](http://openlaw.fr/blog/ia-droit-hebergez-un-atelier-machine-learning-dans-vos-locaux)**
+
+## Guides d'annotation
 
 Pour aider à l'annotation, ces documents sont disponibles :  
 - [Tuto d'annotation](https://github.com/pommedeterresautee/iaetdroit/releases/download/1.0/IA.droit.-.donnees.d.apprentissage.-.tuto.pdf) : guide condensé ;
