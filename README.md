@@ -9,7 +9,6 @@ Ce dépôt contient le code nécessaire au projet [IA & droit](http://openlaw.fr
 ## Guides d'annotation
 
 Pour aider à l'annotation, ces documents sont disponibles :  
-- [Tuto d'annotation](https://github.com/pommedeterresautee/iaetdroit/releases/download/1.0/IA.droit.-.donnees.d.apprentissage.-.tuto.pdf) : guide condensé ;
 - [Prise en main](https://github.com/pommedeterresautee/iaetdroit/releases/download/1.0/AnnotationIAdroit-Priseenmain.pdf) : guide exhaustif ;
 - [Questions frequentes](https://github.com/pommedeterresautee/iaetdroit/releases/download/1.0/Annotation.IA.droit.-.Questions.frequentes.pdf) : la FAQ ;
 - [Plan des annotations](https://github.com/pommedeterresautee/iaetdroit/releases/download/1.0/Plan.d.27annotation.pdf) : le plan de toutes les annotations à imprimer et garder près de soi.
