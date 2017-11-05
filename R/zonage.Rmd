@@ -1,0 +1,86 @@
+---
+title: "Zonage des décisions"
+author: "Michaël Benesty"
+date: "5 novembre 2017"
+output: html_document
+---
+
+## Chargement des librairies
+
+```{R}
+library(data.table)
+library(DT)
+library(fastrtext)
+library(stringi)
+library(assertthat)
+set.seed(123)
+``` 
+
+## Lecture des données
+
+```{R}
+dt <- fread(input = "./annotations-full.csv", encoding = "UTF-8")
+# remove paragraph position
+dt[, types := stri_replace_all_regex(types, "-\\d+", "")]
+print(head(dt))
+```
+
+Il y a **`r nrow(dt)`** paragraphes typés.
+
+## Comptage des types
+
+Avant retrait de certaines catégories
+
+```{R}
+datatable(dt[, .N, types][, `%` := round(100 * N / sum(N), 2)][order(-N)])
+```
+
+## Retrait de certaines catégories
+
+Sont retirés :
+
+* la catégorie `n_a`
+* les paragraphes qui ont moins de 4 mots
+* les catégories qui ont une fréquence de moins de 20
+
+```{R}
+types_to_remove <- dt[stri_count_words(str = text) > 3][, .N, types][N < 20, types]
+dt_cleaned <- dt[!types %in% c(types_to_remove, "n_a")][stri_count_words(str = text) > 3]
+```
+
+## Construction d'un modèle pour fastrtext
+
+```{R}
+dt_sampled <- dt_cleaned[sample(nrow(dt_cleaned))]
+add_prefix_item <- function(label) {
+  s <- stri_extract_all_boundaries(label, simplify = TRUE)
+  paste0("__label__", s, collapse = " ")
+}
+
+add_prefix <- function(labels) sapply(labels, FUN = add_prefix_item, USE.NAMES = FALSE)
+
+dt_sampled[, features := paste(add_prefix(types), tolower(text))]
+temp_file_train <- tempfile()
+temp_file_model <- tempfile()
+
+invisible(assert_that(nrow(dt_sampled) > 8000))
+train_rows <- seq(8000)
+test_rows <- seq(max(train_rows) + 1, nrow(dt_sampled))
+
+writeLines(dt_sampled[train_rows, features], con = temp_file_train)
+
+execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 20, "-lr", 1, "-epoch", 200, "-wordNgrams", 3, "-verbose", 0))
+
+model <- load_model(temp_file_model)
+predictions <- predict(model, sentences = dt_sampled[test_rows, features])
+
+predicted_labels <- stri_replace_all_regex(names(unlist(predictions)), pattern = "^__label__", replacement = "")
+invisible(assert_that(length(test_rows) == length(predicted_labels)))
+
+dt_sampled_with_predictions <- dt_sampled[test_rows][,predicted_labels := predicted_labels]
+
+datatable(dt_sampled_with_predictions[, .(.N, accuracy = round(100 * mean(predicted_labels == types), 2)), types])
+
+```
+
+En moyenne, le bon type est trouvé dans **`r round(100 * dt_sampled_with_predictions[, mean(predicted_labels == types)], 2)`%** des cas.
