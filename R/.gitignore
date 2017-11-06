@@ -32,3 +32,4 @@ build/*
 *.dll
 *.html
 inst/doc
+*.csv

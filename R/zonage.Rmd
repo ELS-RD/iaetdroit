@@ -13,6 +13,7 @@ library(DT)
 library(fastrtext)
 library(stringi)
 library(assertthat)
+library(ggplot2)
 set.seed(123)
 ``` 
 
@@ -20,8 +21,6 @@ set.seed(123)
 
 ```{R}
 dt <- fread(input = "./annotations-full.csv", encoding = "UTF-8")
-# remove paragraph position
-dt[, types := stri_replace_all_regex(types, "-\\d+", "")]
 print(head(dt))
 ```
 
@@ -32,10 +31,12 @@ Il y a **`r nrow(dt)`** paragraphes typés.
 Avant retrait de certaines catégories
 
 ```{R}
-datatable(dt[, .N, types][, `%` := round(100 * N / sum(N), 2)][order(-N)])
+datatable(dt[, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N), types][, `%` := round(100 * nb_doc / sum(nb_doc), 2)][order(-nb_doc)])
 ```
 
 ## Retrait de certaines catégories
+
+Les types sont groupés.
 
 Sont retirés :
 
@@ -44,6 +45,8 @@ Sont retirés :
 * les catégories qui ont une fréquence de moins de 20
 
 ```{R}
+# remove paragraph position
+dt[, types := stri_replace_all_regex(types, "-.+", "")]
 types_to_remove <- dt[stri_count_words(str = text) > 3][, .N, types][N < 20, types]
 dt_cleaned <- dt[!types %in% c(types_to_remove, "n_a")][stri_count_words(str = text) > 3]
 ```
@@ -71,15 +74,16 @@ writeLines(dt_sampled[train_rows, features], con = temp_file_train)
 
 execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 20, "-lr", 1, "-epoch", 200, "-wordNgrams", 3, "-verbose", 0))
 
+dt_sampled_with_predictions <- dt_sampled[test_rows]
 model <- load_model(temp_file_model)
-predictions <- predict(model, sentences = dt_sampled[test_rows, features])
+predictions <- predict(model, sentences = dt_sampled_with_predictions[, features], simplify = TRUE)
 
-predicted_labels <- stri_replace_all_regex(names(unlist(predictions)), pattern = "^__label__", replacement = "")
+predicted_labels <- names(predictions)
 invisible(assert_that(length(test_rows) == length(predicted_labels)))
 
-dt_sampled_with_predictions <- dt_sampled[test_rows][,predicted_labels := predicted_labels]
+dt_sampled_with_predictions[,predicted_labels := predicted_labels]
 
-datatable(dt_sampled_with_predictions[, .(.N, accuracy = round(100 * mean(predicted_labels == types), 2)), types])
+datatable(dt_sampled_with_predictions[, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N, accuracy = round(100 * mean(predicted_labels == types), 2)), types])
 
 ```
 
