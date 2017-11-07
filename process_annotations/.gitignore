@@ -1,0 +1,8 @@
+.idea
+__pycache__
+.stats_cache
+tags
+dist
+.mypy_cache/
+*.egg-info
+*.csv
