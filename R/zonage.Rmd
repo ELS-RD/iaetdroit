@@ -20,7 +20,7 @@ set.seed(123)
 ## Lecture des données
 
 ```{R}
-dt <- fread(input = "./annotations-full.csv", encoding = "UTF-8")
+dt <- fread(input = "./annotations-20-lots.csv", encoding = "UTF-8")
 print(head(dt))
 ```
 
@@ -31,7 +31,7 @@ Il y a **`r nrow(dt)`** paragraphes typés.
 Avant retrait de certaines catégories
 
 ```{R}
-datatable(dt[, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N), types][, `%` := round(100 * nb_doc / sum(nb_doc), 2)][order(-nb_doc)])
+datatable(dt[, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N), types][, `%` := round(100 * nb_doc / sum(nb_doc), 2)])
 ```
 
 ## Retrait de certaines catégories
@@ -87,4 +87,4 @@ datatable(dt_sampled_with_predictions[, .(nb_mots = round(mean(stri_count_words(
 
 ```
 
-En moyenne, le bon type est trouvé dans **`r round(100 * dt_sampled_with_predictions[, mean(predicted_labels == types)], 2)`%** des cas.
+En moyenne, le bon type est trouvé dans **`r round(100 * dt_sampled_with_predictions[, mean(predicted_labels == types)], 2)`%** des cas et représente **`r nrow(dt_sampled_with_predictions)`** paragraphes.
