@@ -22,6 +22,12 @@ set.seed(123)
 ```{R}
 dt <- fread(input = "./annotations-20-lots.csv", encoding = "UTF-8")
 print(head(dt))
+
+for (i in seq(50)) {
+  replace <- dt[, c(rep("n_a", i), head(types, -i))]
+  dt[, types := ifelse(types == "n_a", replace, types)]
+}
+
 ```
 
 Il y a **`r nrow(dt)`** paragraphes typés.
@@ -55,14 +61,18 @@ dt_cleaned <- dt[!types %in% c(types_to_remove, "n_a")][stri_count_words(str = t
 
 ```{R}
 dt_sampled <- dt_cleaned[sample(nrow(dt_cleaned))]
-add_prefix_item <- function(label) {
+add_prefix_item <- function(label, prefix) {
   s <- stri_extract_all_boundaries(label, simplify = TRUE)
-  paste0("__label__", s, collapse = " ")
+  paste0(prefix, s, collapse = " ")
 }
 
-add_prefix <- function(labels) sapply(labels, FUN = add_prefix_item, USE.NAMES = FALSE)
+add_prefix <- function(labels, prefix) sapply(labels, FUN = add_prefix_item, prefix = prefix, USE.NAMES = FALSE)
+dt_sampled[, text := tolower(text)]
+dt_sampled[, previous_text := add_prefix(c("", head(text, -1)), "previous_")]
+dt_sampled[, next_text := add_prefix(c(tail(text, -1), ""), "next_")]
 
-dt_sampled[, features := paste(add_prefix(types), tolower(text))]
+
+dt_sampled[, features := paste(add_prefix(types, "__label__"), text)]
 temp_file_train <- tempfile()
 temp_file_model <- tempfile()
 
