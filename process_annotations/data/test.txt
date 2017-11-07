@@ -1,0 +1,15 @@
+Lorem ipsum dolor sit amet, ééééééééééé adipiscing elit.
+Donec pellentesque nisl eu mi mollis, ut euismod urna rutrum.
+Nam quis egestas purus.
+Vestibulum porta tortor in neque dictum, ac imperdiet metus aliquet.
+
+Nam vitae augue eget leo convallis dapibus.
+Sed vel tortor quam.
+
+Praesent iaculis sem eget lectus tempor pretium.
+
+
+---------------------------------------------------
+
+L'annotation de cette décision vous a semblé [NOTE]
+
