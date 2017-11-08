@@ -23,11 +23,6 @@ set.seed(123)
 dt <- fread(input = "./annotations-20-lots.csv", encoding = "UTF-8")
 print(head(dt))
 
-for (i in seq(50)) {
-  replace <- dt[, c(rep("n_a", i), head(types, -i))]
-  dt[, types := ifelse(types == "n_a", replace, types)]
-}
-
 ```
 
 Il y a **`r nrow(dt)`** paragraphes typés.
@@ -46,15 +41,17 @@ Les types sont groupés.
 
 Sont retirés :
 
+* les documents de moins de 35 lignes
 * la catégorie `n_a`
 * les paragraphes qui ont moins de 4 mots
 * les catégories qui ont une fréquence de moins de 20
 
 ```{R}
+under_35_lines <- dt[, .N, filename][N <= 35, filename]
 # remove paragraph position
-dt[, types := stri_replace_all_regex(types, "-.+", "")]
+dt[, types := stri_replace_all_regex(types, "-\\d+", "")]
 types_to_remove <- dt[stri_count_words(str = text) > 3][, .N, types][N < 20, types]
-dt_cleaned <- dt[!types %in% c(types_to_remove, "n_a")][stri_count_words(str = text) > 3]
+dt_cleaned <- dt[!types %in% c(types_to_remove, "n_a")][!filename %in% under_35_lines][stri_count_words(str = text) > 3]
 ```
 
 ## Construction d'un modèle pour fastrtext
