@@ -20,7 +20,7 @@ set.seed(123)
 ## Lecture des données
 
 ```{R}
-dt <- fread(input = "./annotations-20-lots.csv", encoding = "UTF-8")
+dt <- fread(input = "./annotations-clean.csv", encoding = "UTF-8")
 print(head(dt))
 
 ```
@@ -47,9 +47,23 @@ Sont retirés :
 * les catégories qui ont une fréquence de moins de 20
 
 ```{R}
+
 under_35_lines <- dt[, .N, filename][N <= 35, filename]
 # remove paragraph position
 dt[, types := stri_replace_all_regex(types, "-\\d+", "")]
+
+# remove double labels due to numbers
+make_unique_labels <- function(label) {
+  paste(sort(unique(unlist(stri_split_fixed(label, pattern = " ")))), collapse = " ")
+}
+
+dt[, types := sapply(types, make_unique_labels)]
+
+# rationalizing motifs and dispositifs
+dt[, types := ifelse(stri_detect_regex(types, "^Motif"), "Motif", types)]
+dt[, types := ifelse(stri_detect_regex(types, "^Dispositif"), "Dispositif", types)]
+
+
 types_to_remove <- dt[stri_count_words(str = text) > 3][, .N, types][N < 20, types]
 dt_cleaned <- dt[!types %in% c(types_to_remove, "n_a")][!filename %in% under_35_lines][stri_count_words(str = text) > 3]
 ```
@@ -91,6 +105,8 @@ invisible(assert_that(length(test_rows) == length(predicted_labels)))
 dt_sampled_with_predictions[,predicted_labels := predicted_labels]
 
 datatable(dt_sampled_with_predictions[, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N, accuracy = round(100 * mean(predicted_labels == types), 2)), types])
+
+
 
 ```
 
