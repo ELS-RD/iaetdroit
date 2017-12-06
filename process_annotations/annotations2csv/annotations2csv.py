@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #  -*- coding: utf-8 -*-
 
+
 import os
 import argparse
 import pathlib
@@ -17,12 +18,18 @@ IntervalTree = TypeVar('IntervalTree', bound=itree.IntervalTree)
 Interval = TypeVar('Interval', bound=itree.Interval)
 Namespace = TypeVar('Namespace', bound=argparse.Namespace)
 AnnType = str
+AnnDifficulty = str
+Filename = str
 
 # custom type
-Annotated_line = NamedTuple('Annotated_line', [('line_num', int),
-                                               ('types', Set[str]),
-                                               ('text', str)])
-
+AnnotatedLine = NamedTuple('AnnotatedLine', [('line_num', int),
+                                             ('types', Set[AnnType]),
+                                             ('text', str)])
+Annotations = List[AnnotatedLine]
+AnnotationData = NamedTuple('AnnotationData',
+                            [('annotation_difficulty', AnnType),
+                             ('annotations', Annotations)])
+AnnotatedFiles = Dict[Filename, AnnotationData]
 
 # matches the annotation type, and all the beginning/ending offsets
 PATTERN_ANN = \
@@ -54,12 +61,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def get_interval_ann(match) -> Tuple[int, int, set]:
-    """Return a Interval corresponding to the 'match' pattern. Keeps only the
-    first and last value matched, this corresponds to the widest interval"""
+    """Return a Interval corresponding to the 'match' pattern, using the min
+    and max of all the intervals"""
 
     anns_type: Set = match.captures('type')[0]
-    anns_begin: int = int(match.captures('begin')[0])
-    anns_end: int = int(match.captures('end')[-1])
+    anns_begin: int = min(map(int, match.captures('begin')))
+    anns_end: int = max(map(int, match.captures('end')))
 
     return anns_begin, anns_end, anns_type
 
@@ -80,7 +87,7 @@ def parse_annotations(filename: str, pattern) -> IntervalTree:
                 if parsed_ann:
                     interval_tree.addi(*get_interval_ann(parsed_ann))
     except OSError as error:
-        print(f'✘ Error while parsing {filename}: {error}')
+        print(f'✘ Error while parsing {filename}:\n{error}')
 
     return interval_tree
 
@@ -99,31 +106,33 @@ def get_interval_offsets_txt(lines: List[str]) -> Iterator[Tuple[int, int]]:
                cumulative_lines_length)
 
 
-def parse_text(filename: str, nb_lines_skipped: int) -> IntervalTree:
+def parse_text(filename: str) -> IntervalTree:
     """Return an ``IntervalTree`` for this file (empty if there's an error)"""
 
     try:
         with open(filename, 'r') as ftxt:
             # skip the 5 last lines, used for controlling the annotation
+
             return itree.IntervalTree.from_tuples(
-                get_interval_offsets_txt(ftxt.
-                                         readlines()[0:-nb_lines_skipped]))
+                get_interval_offsets_txt(ftxt.readlines()))
     except OSError as error:
-        print(f'✘ Error while parsing {filename}: {error}')
+        print(f'✘ Error while parsing {filename}:\n{error}')
 
         return itree.IntervalTree()
 
 
-def annotate_txt(annotations: Dict[str, List[Annotated_line]], file_text: str,
-                 nb_lines_skipped: int, interval_tree_ann: IntervalTree,
-                 interval_tree_txt: List[IntervalTree],
+def annotate_txt(annotations: AnnotatedFiles,
+                 file_text: Filename, nb_lines_skipped: int,
+                 interval_tree_ann: IntervalTree,
+                 interval_tree_txt: IntervalTree,
                  no_type: AnnType) -> None:
     """Modify ``annotations``: adds annotations of ``file_text``, using the
     annotations and text intervals.
     When no annotation exists, the annotation type is set to ``no_type``"""
 
     ord_interval_tree_txt: List[IntervalTree] = sorted(interval_tree_txt)
-    annotations[file_text] = []
+    annotations[file_text] = AnnotationData(annotation_difficulty=no_type,
+                                            annotations=[])
 
     try:
         # virtual line: line created when a line is splited for Brat because it
@@ -134,68 +143,77 @@ def annotate_txt(annotations: Dict[str, List[Annotated_line]], file_text: str,
             idx_raw: int = 0
             idx_line: int = 1
 
-            #  it is
-            # OK to read all the lines because the files are small (< 500KB)
-            for line in ftxt.readlines()[0:-nb_lines_skipped]:
-                # types for overlapping intervals
-                maybe_types: Set[itree.Interval] = interval_tree_ann.search(
-                    ord_interval_tree_txt[idx_raw])
-                types: Set[AnnType] = {t.data for t in maybe_types} \
-                    if len(maybe_types) != 0 else {no_type}
-                annotations[file_text] += [Annotated_line(line_num=idx_line,
-                                                          types=types,
-                                                          text=line.rstrip())]
+            # it is OK to read all the lines because
+            # the files are small (< 500KB)
+            all_lines = ftxt.readlines()
+            for line in all_lines:
+                types = get_types(idx_raw, interval_tree_ann, no_type,
+                                  ord_interval_tree_txt)
+                # anns: Annotations =
+                annotations[file_text].annotations.append(
+                    AnnotatedLine(line_num=idx_line,
+                                  types=types,
+                                  text=line.rstrip()))
+                # annotations[file_text]._replace(annotations=anns)
 
                 idx_raw += 1
                 idx_line += 1
+
+            # the last line of the .txt file is blank,
+            # the difficulty is the line at position -2
+            ann_difficulty: AnnType = annotations[file_text].annotations[
+                -2].types.pop()
+            idx_max_line_kept: int = len(all_lines) - nb_lines_skipped
+            annotations[file_text] = AnnotationData(
+                annotation_difficulty=ann_difficulty,
+                annotations=list(itertools.takewhile(
+                    lambda ann_line: ann_line.line_num < idx_max_line_kept,
+                    annotations[file_text].annotations)))
     except OSError as error:
-        print(f'✘ Error while processing {file_text} (annotating): {error}')
+        print(f'✘ Error while annotating {file_text}:\n{error}')
 
 
-def merge_txt(raw_ann: List[Annotated_line], no_type: AnnType,
-              prelude_type: AnnType) -> List[Annotated_line]:
+def get_types(idx_raw: int, interval_tree_ann: IntervalTree,
+              no_type: AnnType, ord_interval_tree_txt: List[IntervalTree]) -> \
+        Set[AnnType]:
+    # types for overlapping intervals
+    maybe_types: Set[itree.Interval] = interval_tree_ann.search(
+        ord_interval_tree_txt[idx_raw])
+    types: Set[AnnType] = {t.data for t in maybe_types} \
+        if len(maybe_types) != 0 else {no_type}
+
+    return types
+
+
+def merge_txt(raw_ann: AnnotationData, no_type: AnnType) -> AnnotationData:
     """
-    Return a normalized (lines merged) version of ``raw_ann``
+    Return a normalized (lines merged) version of ``raw_ann``:
     '\n\n' in *.txt are the real lines, and are parsed as ''.
-    So we merge all the strings between ''
+    So to create real lines, we merge all the strings between ''.
     """
 
-    merged_ann: List[Annotated_line] = []
+    merged_ann: AnnotationData = AnnotationData(
+        annotation_difficulty=raw_ann.annotation_difficulty,
+        annotations=[])
     types: Set = set()
-    lines: List = []
+    lines: List[str] = []
     i: int = 0
 
-    for virtual_line in raw_ann:
+    for virtual_line in raw_ann.annotations:
         if virtual_line.text == '':
             i += 1
             # remove no_type from the virtual lines when part of the line was
             # annotated
             if len(types) > 1:
                 types.discard(no_type)
-            merged_ann += [Annotated_line(line_num=i,
-                                          types=types,
-                                          text=' '.join(lines))]
+            merged_ann.annotations.append(AnnotatedLine(line_num=i,
+                                                        types=types,
+                                                        text=' '.join(lines)))
             types = set()
             lines = []
         else:
             types |= virtual_line.types
             lines.append(virtual_line.text)
-
-    def has_no_type(ann_line: Annotated_line) -> bool:
-        return {no_type} == ann_line.types
-
-    # add the prelude_type to all the first untyped lines
-    for_prelude_ann: List[Annotated_line] = list(itertools.
-                                                 takewhile(has_no_type,
-                                                           merged_ann))
-    with_prelude_ann: List[Annotated_line] = list(
-        map(lambda x: Annotated_line(line_num=x.line_num,
-                                     types={prelude_type},
-                                     text=x.text),
-            for_prelude_ann))
-    tail_ann: List[Annotated_line] = list(itertools.dropwhile(has_no_type,
-                                                              merged_ann))
-    merged_ann = list(with_prelude_ann) + (list(tail_ann))
 
     return merged_ann
 
@@ -204,8 +222,6 @@ def main():
     # Generate a CSV file:
     # - Processes recursively all the annotations (.ann) and text (.txt) files
     # in the data directory given as a parameter.
-    # - The first lines of .txt before the first annotation are typed as
-    # `prelude_type` (see definition below).
 
     args: Namespace = parse_args()
 
@@ -213,16 +229,15 @@ def main():
     dir_base: pathlib.Path = pathlib.Path(args.dir_base).resolve()
 
     no_type: AnnType = 'n_a'
-    prelude_type: AnnType = 'Prelude'
-    annotations = dict()  # type: Dict[str, List[Annotated_line]]
-    merged_ann = dict()  # type: Dict[str, List[Annotated_line]]
+    annotations: AnnotatedFiles = dict()
+    merged_ann: AnnotatedFiles = dict()
     # skip the 5 last lines, used to evaluate the difficulty of the annotation
     nb_lines_skipped = 5  # type: int
     stat_nb_files = 0  # type: int
     stat_nb_files_skipped = 0  # type: int
 
     print(f'Processing: "{dir_base}"')
-    for file_ann in dir_base.resolve().glob('**/*.ann'):
+    for file_ann in dir_base.glob('**/*.ann'):
         if args.verbose:
             print(file_ann)
 
@@ -239,15 +254,16 @@ def main():
             interval_tree = parse_annotations(file_ann, PATTERN_ANN)
 
             file_text = os.path.splitext(file_ann)[0] + '.txt'
-            interval_tree_txt = parse_text(file_text, nb_lines_skipped)
+            interval_tree_txt = parse_text(file_text)
 
             # maps each line of .txt with the annotation type(s)
-            annotate_txt(annotations, file_text, nb_lines_skipped,
-                         interval_tree, interval_tree_txt,
+            annotate_txt(annotations, file_text,
+                         nb_lines_skipped,
+                         interval_tree,
+                         interval_tree_txt,
                          no_type)
             # Now convert this "raw" annotated text to the original text format
-            merged_ann[file_text] = merge_txt(annotations[file_text], no_type,
-                                              prelude_type)
+            merged_ann[file_text] = merge_txt(annotations[file_text], no_type)
 
             if args.verbose:
                 print('✓')
@@ -257,14 +273,23 @@ def main():
         f' {stat_nb_files_skipped} skipped (empty).')
 
     # write the CSV
-    with open(file_csv, 'w', newline='') as c:
-        writer = csv.writer(c, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
-        writer.writerow(['filename', 'line_num', 'types', 'text'])
-        for filename in merged_ann:
-            for ann in merged_ann[filename]:
-                writer.writerow([filename, ann.line_num, ' '.join(ann.types),
-                                 ann.text])
-    print(f'Result in "{file_csv}"')
+    try:
+        with open(file_csv, 'w', newline='') as c:
+            writer = csv.writer(c, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
+            writer.writerow(
+                ['filename', 'line_num', 'types', 'annotation_difficulty',
+                 'text'])
+            for filename in merged_ann:
+                annotation_difficulty = merged_ann[
+                    filename].annotation_difficulty
+                for ann in merged_ann[filename].annotations:
+                    writer.writerow(
+                        [filename, ann.line_num, ' '.join(ann.types),
+                         annotation_difficulty,
+                         ann.text])
+        print(f'Result in "{file_csv}"')
+    except OSError as error:
+        print(f'✘ Error while writing {file_csv}:\n{error}')
 
 
 if __name__ == '__main__':
