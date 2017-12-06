@@ -1,9 +1,11 @@
 ---
 title: "Zonage des décisions"
 author: "Michaël Benesty"
-date: "5 novembre 2017"
+date: "`r format(Sys.time(), '%d %B %Y')`"
 output: html_document
 ---
+
+Pour cet exercice, il n'y a pas eu de recherche des hyperparamètres qui pourraient être améliorés.
 
 ## Chargement des librairies
 
@@ -43,12 +45,10 @@ Sont retirés :
 
 * les documents de moins de 35 lignes
 * la catégorie `n_a`
-* les paragraphes qui ont moins de 4 mots
-* les catégories qui ont une fréquence de moins de 20
 
 ```{R}
 
-under_35_lines <- dt[, .N, filename][N <= 35, filename]
+under_35_lines <- dt[, .N, file][N <= 35, file]
 # remove paragraph position
 dt[, types := stri_replace_all_regex(types, "-\\d+", "")]
 
@@ -60,42 +60,57 @@ make_unique_labels <- function(label) {
 dt[, types := sapply(types, make_unique_labels)]
 
 # rationalizing motifs and dispositifs
-dt[, types := ifelse(stri_detect_regex(types, "^Motif"), "Motif", types)]
-dt[, types := ifelse(stri_detect_regex(types, "^Dispositif"), "Dispositif", types)]
+dt[, types := ifelse(stri_detect_regex(types, "^Motif"), ifelse(stri_detect_fixed(types, "Motif_texte"), "Motif_texte", "Motif"), types)]
+dt[types == "Dispositif-demandes_accessoires", types := "Dispositif_demandes_accessoires"]
+dt[types == "Dispositif Dispositif-demandes_accessoires", types := "Dispositif_demandes_accessoires"]
+dt[types == "Contenu_decision_attaquee Expose_litige", types := "Contenu_decision_attaquee_Expose_litige"]
+dt[types == "Entete_appelant Entete_avocat", types := "Entete_appelant_Entete_avocat"]
+dt[types == "Entete_avocat Entete_intime", types := "Entete_avocat_Entete_intime"]
 
-
-types_to_remove <- dt[stri_count_words(str = text) > 3][, .N, types][N < 20, types]
-dt_cleaned <- dt[!types %in% c(types_to_remove, "n_a")][!filename %in% under_35_lines][stri_count_words(str = text) > 3]
+dt_cleaned <- dt[!file %in% under_35_lines][types != "n_a"]#[stri_count_words(str = text) > 0]
 ```
 
 ## Construction d'un modèle pour fastrtext
 
+Une des astuces utilisées est de mettre en features les paragraphes qui précèdent et suivent le paragraphe dont le label est à deviner.
+
 ```{R}
-dt_sampled <- dt_cleaned[sample(nrow(dt_cleaned))]
 add_prefix_item <- function(label, prefix) {
   s <- stri_extract_all_boundaries(label, simplify = TRUE)
   paste0(prefix, s, collapse = " ")
 }
 
 add_prefix <- function(labels, prefix) sapply(labels, FUN = add_prefix_item, prefix = prefix, USE.NAMES = FALSE)
-dt_sampled[, text := tolower(text)]
-dt_sampled[, previous_text := add_prefix(c("", head(text, -1)), "previous_")]
-dt_sampled[, next_text := add_prefix(c(tail(text, -1), ""), "next_")]
 
+swipe_features <- function(file, text, nbr) {
+  if (nbr > 0) {
+    p <- paste0("previous_", nbr, "_")
+    r <- add_prefix(c(rep("", nbr), head(text, -nbr)), p)
+    f <- c(rep("", nbr), head(file, -nbr)) == file
+    ifelse(f, r, "")
+  } else {
+    nbr <- abs(nbr)
+    p <- paste0("next_", nbr, "_")
+    r <- add_prefix(c(tail(text, -nbr), rep("", nbr)), p)
+    f <- c(tail(file, -nbr), rep("", nbr)) == file
+    ifelse(f, r, "")
+  }
+}
 
-dt_sampled[, features := paste(add_prefix(types, "__label__"), text)]
+dt_cleaned[, text := stri_replace_all_regex(tolower(text), pattern = "[:punct:]", replacement = " ")]
+dt_cleaned[, features := paste(add_prefix(types, "__label__"), paste(text, swipe_features(file, text, -1), swipe_features(file, text, -2), swipe_features(file, text, 1), swipe_features(file, text, 2), swipe_features(file, text, -3), swipe_features(file, text, 3)))]
+
 temp_file_train <- tempfile()
 temp_file_model <- tempfile()
 
-invisible(assert_that(nrow(dt_sampled) > 8000))
-train_rows <- seq(8000)
-test_rows <- seq(max(train_rows) + 1, nrow(dt_sampled))
+train_rows <- seq(0.8 * nrow(dt_cleaned))
+test_rows <- seq(max(train_rows) + 1, nrow(dt_cleaned))
 
-writeLines(dt_sampled[train_rows, features], con = temp_file_train)
+writeLines(dt_cleaned[train_rows, sample(features)], con = temp_file_train)
 
 execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 20, "-lr", 1, "-epoch", 200, "-wordNgrams", 3, "-verbose", 0))
 
-dt_sampled_with_predictions <- dt_sampled[test_rows]
+dt_sampled_with_predictions <- dt_cleaned[test_rows]
 model <- load_model(temp_file_model)
 predictions <- predict(model, sentences = dt_sampled_with_predictions[, features], simplify = TRUE)
 
@@ -105,8 +120,6 @@ invisible(assert_that(length(test_rows) == length(predicted_labels)))
 dt_sampled_with_predictions[,predicted_labels := predicted_labels]
 
 datatable(dt_sampled_with_predictions[, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N, accuracy = round(100 * mean(predicted_labels == types), 2)), types])
-
-
 
 ```
 
