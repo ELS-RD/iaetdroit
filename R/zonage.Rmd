@@ -43,12 +43,9 @@ Les types sont groupés.
 
 Sont retirés :
 
-* les documents de moins de 35 lignes
 * la catégorie `n_a`
 
 ```{R}
-
-under_35_lines <- dt[, .N, file][N <= 35, file]
 # remove paragraph position
 dt[, types := stri_replace_all_regex(types, "-\\d+", "")]
 
@@ -64,10 +61,10 @@ dt[, types := ifelse(stri_detect_regex(types, "^Motif"), ifelse(stri_detect_fixe
 dt[types == "Dispositif-demandes_accessoires", types := "Dispositif_demandes_accessoires"]
 dt[types == "Dispositif Dispositif-demandes_accessoires", types := "Dispositif_demandes_accessoires"]
 dt[types == "Contenu_decision_attaquee Expose_litige", types := "Contenu_decision_attaquee_Expose_litige"]
-dt[types == "Entete_appelant Entete_avocat", types := "Entete_appelant_Entete_avocat"]
-dt[types == "Entete_avocat Entete_intime", types := "Entete_avocat_Entete_intime"]
+dt[types == "Entete_appelant Entete_avocat", types := "Entete_appelant_avec_avocat"]
+dt[types == "Entete_avocat Entete_intime", types := "Entete_intime_avec_avocat"]
 
-dt_cleaned <- dt[!file %in% under_35_lines][types != "n_a"]#[stri_count_words(str = text) > 0]
+dt_cleaned <- dt[types != "n_a"]
 ```
 
 ## Construction d'un modèle pour fastrtext
@@ -75,12 +72,15 @@ dt_cleaned <- dt[!file %in% under_35_lines][types != "n_a"]#[stri_count_words(st
 Une des astuces utilisées est de mettre en features les paragraphes qui précèdent et suivent le paragraphe dont le label est à deviner.
 
 ```{R}
-add_prefix_item <- function(label, prefix) {
-  s <- stri_extract_all_boundaries(label, simplify = TRUE)
-  paste0(prefix, s, collapse = " ")
-}
 
-add_prefix <- function(labels, prefix) sapply(labels, FUN = add_prefix_item, prefix = prefix, USE.NAMES = FALSE)
+add_prefix <- function(labels, prefix) {
+  add_prefix_item <- function(label, prefix) {
+    s <- stri_extract_all_boundaries(label, simplify = TRUE)
+    paste0(prefix, s, collapse = " ")
+  }
+  
+  sapply(labels, FUN = add_prefix_item, prefix = prefix, USE.NAMES = FALSE)
+}
 
 swipe_features <- function(file, text, nbr) {
   if (nbr > 0) {
