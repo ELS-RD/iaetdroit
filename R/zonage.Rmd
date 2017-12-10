@@ -83,7 +83,7 @@ dt_cleaned <- dt[types_clean != "n_a"]
 La transformation des paragraphes pour l'apprentissage consiste essentiellement à ajouter les paragraphes qui précèdent et suivent sous forme de contexte.
 
 ```{R text_preprocessing}
-add_prefix <- function(labels, prefix) {
+add_prefix <- function(prefix, labels) {
   add_prefix_item <- function(label, prefix) {
     s <- stri_extract_all_boundaries(label, simplify = TRUE)
     paste0(prefix, s, collapse = " ")
@@ -95,13 +95,13 @@ add_prefix <- function(labels, prefix) {
 swipe_features <- function(file, text, nbr) {
   if (nbr > 0) {
     p <- paste0("previous_", nbr, "_")
-    r <- add_prefix(c(rep("", nbr), head(text, -nbr)), p)
+    r <- add_prefix(p, c(rep("", nbr), head(text, -nbr)))
     f <- c(rep("", nbr), head(file, -nbr)) == file
     ifelse(f, r, "")
   } else {
     nbr <- abs(nbr)
     p <- paste0("next_", nbr, "_")
-    r <- add_prefix(c(tail(text, -nbr), rep("", nbr)), p)
+    r <- add_prefix(p, c(tail(text, -nbr), rep("", nbr)))
     f <- c(tail(file, -nbr), rep("", nbr)) == file
     ifelse(f, r, "")
   }
@@ -124,11 +124,11 @@ On essaye ci-dessous de deviner la nature du paragraphe.
 ```{R paragraph_types_learning}
 
 local({
-  dt_cleaned[, features_with_type_label := paste(add_prefix(types_clean, "__label__"), features_without_label)]
+  dt_cleaned[, features_with_type_label := paste(add_prefix("__label__", types_clean), features_without_label)]
   temp_file_train <- tempfile()
   temp_file_model <- tempfile()
   writeLines(dt_cleaned[train_rows, sample(features_with_type_label)], con = temp_file_train)
-  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 3, "-verbose", 0))
+  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 2, "-verbose", 0))
   model <- load_model(temp_file_model)
   predictions <- predict(model, sentences = dt_cleaned[test_rows][, features_with_type_label], simplify = TRUE)
   predicted_labels <- names(predictions)
@@ -147,11 +147,11 @@ Des tags macro sont présents dans le fichier.
 ```{R paragraph_types_macro_learning}
 
 local({
-  dt_cleaned[, features_with_type_macro := paste(add_prefix(types_macro, "__label__"), features_without_label)]
+  dt_cleaned[, features_with_type_macro := paste(add_prefix("__label__", types_macro), features_without_label)]
   temp_file_train <- tempfile()
   temp_file_model <- tempfile()
   writeLines(dt_cleaned[train_rows, sample(features_with_type_macro)], con = temp_file_train)
-  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 3, "-verbose", 0))
+  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 2, "-verbose", 0))
   model <- load_model(temp_file_model)
   predictions <- predict(model, sentences = dt_cleaned[test_rows, features_with_type_macro], simplify = TRUE)
   invisible(assert_that(length(test_rows) == length(predictions)))
@@ -169,11 +169,11 @@ On essaye de prédire qui est lié au paragraphe.
 
 ```{R paragraph_side_learning}
 local({
-  dt_cleaned[, features_with_side_label := paste(add_prefix(side, "__label__"), features_without_label)]
+  dt_cleaned[, features_with_side_label := paste(add_prefix("__label__", side), features_without_label)]
   temp_file_train <- tempfile()
   temp_file_model <- tempfile()
   writeLines(dt_cleaned[train_rows, sample(features_with_side_label)], con = temp_file_train)
-  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 3, "-verbose", 0))
+  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 2, "-verbose", 0))
   model <- load_model(temp_file_model)
   predictions <- predict(model, sentences = dt_cleaned[test_rows, features_with_side_label], simplify = TRUE)
   invisible(assert_that(length(test_rows) == length(predictions)))
