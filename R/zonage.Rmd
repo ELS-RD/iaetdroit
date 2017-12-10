@@ -9,6 +9,8 @@ Pour cet exercice, il n'y a pas eu de recherche des hyperparamètres qui pourrai
 L'approche choisie est une classification multiclass avec `fastrtext`.  
 La prédiction du type du paragraphe est séparée de la prédiction de la partie concernée.
 
+# Pré traitements
+
 ## Chargement des librairies
 
 ```{R lib_loading}
@@ -106,69 +108,78 @@ swipe_features <- function(file, text, nbr) {
 }
 
 dt_cleaned[, text := stri_replace_all_regex(tolower(text), pattern = "[:punct:]", replacement = " ")]
-dt_cleaned[, features_without_label := paste(text, swipe_features(file, text, -1), swipe_features(file, text, -2), swipe_features(file, text, 1), swipe_features(file, text, 2), swipe_features(file, text, -3))]
+dt_cleaned[, features_without_label := paste(swipe_features(file, text, 3), swipe_features(file, text, 2), swipe_features(file, text, 1), text, swipe_features(file, text, -1), swipe_features(file, text, -2), swipe_features(file, text, -3))]
+
+train_rows <- seq(0.8 * nrow(dt_cleaned))
+test_rows <- seq(max(train_rows) + 1, nrow(dt_cleaned))
 
 ```
+
+# Apprentissages
 
 ## Typage des paragraphes
 
 On essaye ci-dessous de deviner la nature du paragraphe.
 
-```{R paragraph_types}
-temp_file_train <- tempfile()
-temp_file_model <- tempfile()
+```{R paragraph_types_learning}
 
-train_rows <- seq(0.8 * nrow(dt_cleaned))
-test_rows <- seq(max(train_rows) + 1, nrow(dt_cleaned))
+local({
+  dt_cleaned[, features_with_type_label := paste(add_prefix(types_clean, "__label__"), features_without_label)]
+  temp_file_train <- tempfile()
+  temp_file_model <- tempfile()
+  writeLines(dt_cleaned[train_rows, sample(features_with_type_label)], con = temp_file_train)
+  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 3, "-verbose", 0))
+  model <- load_model(temp_file_model)
+  predictions <- predict(model, sentences = dt_cleaned[test_rows][, features_with_type_label], simplify = TRUE)
+  predicted_labels <- names(predictions)
+  invisible(assert_that(length(test_rows) == length(predicted_labels)))
+  dt_cleaned[test_rows, predicted_labels := predicted_labels]
+  datatable(dt_cleaned[test_rows, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N, accuracy = round(100 * mean(predicted_labels == types_clean), 2)), types_clean])
+})
+```
 
-dt_cleaned[, features_with_type_label := paste(add_prefix(types_clean, "__label__"), features_without_label)]
+En moyenne, le bon type est trouvé dans **`r round(100 * dt_cleaned[test_rows, mean(predicted_labels == types_clean)], 2)`%** des **`r length(test_rows)`** paragraphes.
 
-writeLines(dt_cleaned[train_rows, sample(features_with_type_label)], con = temp_file_train)
+## Typage macro
 
-execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 20, "-lr", 1, "-epoch", 200, "-wordNgrams", 3, "-verbose", 0))
+Des tags macro sont présents dans le fichier.
 
-dt_sampled_with_predictions <- dt_cleaned[test_rows]
-model <- load_model(temp_file_model)
-predictions <- predict(model, sentences = dt_sampled_with_predictions[, features_with_type_label], simplify = TRUE)
+```{R paragraph_types_macro_learning}
 
-predicted_labels <- names(predictions)
-invisible(assert_that(length(test_rows) == length(predicted_labels)))
-
-dt_sampled_with_predictions[,predicted_labels := predicted_labels]
-
-datatable(dt_sampled_with_predictions[, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N, accuracy = round(100 * mean(predicted_labels == types_clean), 2)), types_clean])
+local({
+  dt_cleaned[, features_with_type_macro := paste(add_prefix(types_macro, "__label__"), features_without_label)]
+  temp_file_train <- tempfile()
+  temp_file_model <- tempfile()
+  writeLines(dt_cleaned[train_rows, sample(features_with_type_macro)], con = temp_file_train)
+  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 3, "-verbose", 0))
+  model <- load_model(temp_file_model)
+  predictions <- predict(model, sentences = dt_cleaned[test_rows, features_with_type_macro], simplify = TRUE)
+  invisible(assert_that(length(test_rows) == length(predictions)))
+  dt_cleaned[test_rows, predicted_labels_macro := names(predictions)]
+  datatable(dt_cleaned[test_rows, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N, accuracy = round(100 * mean(types_macro == predicted_labels_macro), 2)), types_macro])
+})
 
 ```
 
-En moyenne, le bon type est trouvé dans **`r round(100 * dt_sampled_with_predictions[, mean(predicted_labels == types_clean)], 2)`%** des **`r nrow(dt_sampled_with_predictions)`** paragraphes.
+En moyenne, le bon type macro est trouvé dans **`r round(100 * dt_cleaned[test_rows, mean(predicted_labels_macro == types_macro)], 2)`%** des **`r length(test_rows)`** paragraphes.
 
-# Partie concernée par un paragraphe
+## Partie concernée par un paragraphe
 
 On essaye de prédire qui est lié au paragraphe.
 
-```{R paragraph_side}
-temp_file_train <- tempfile()
-temp_file_model <- tempfile()
-
-train_rows <- seq(0.8 * nrow(dt_cleaned))
-test_rows <- seq(max(train_rows) + 1, nrow(dt_cleaned))
-
-dt_cleaned[, features_with_side_label := paste(add_prefix(side, "__label__"), features_without_label)]
-
-writeLines(dt_cleaned[train_rows, sample(features_with_side_label)], con = temp_file_train)
-
-execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 20, "-lr", 1, "-epoch", 200, "-wordNgrams", 3, "-verbose", 0))
-
-dt_sampled_with_predictions <- dt_cleaned[test_rows]
-model <- load_model(temp_file_model)
-predictions <- predict(model, sentences = dt_sampled_with_predictions[, features_with_side_label], simplify = TRUE)
-
-predicted_side <- names(predictions)
-invisible(assert_that(length(test_rows) == length(predicted_side)))
-
-dt_sampled_with_predictions[,predicted_side := predicted_side]
-
-datatable(dt_sampled_with_predictions[, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N, accuracy = round(100 * mean(predicted_side == side), 2)), side])
+```{R paragraph_side_learning}
+local({
+  dt_cleaned[, features_with_side_label := paste(add_prefix(side, "__label__"), features_without_label)]
+  temp_file_train <- tempfile()
+  temp_file_model <- tempfile()
+  writeLines(dt_cleaned[train_rows, sample(features_with_side_label)], con = temp_file_train)
+  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 3, "-verbose", 0))
+  model <- load_model(temp_file_model)
+  predictions <- predict(model, sentences = dt_cleaned[test_rows, features_with_side_label], simplify = TRUE)
+  invisible(assert_that(length(test_rows) == length(predictions)))
+  dt_cleaned[test_rows, predicted_side := names(predictions)]
+  datatable(dt_cleaned[test_rows, .(nb_mots = round(mean(stri_count_words(text))), nb_doc = .N, accuracy = round(100 * mean(predicted_side == side), 2)), side])
+})
 ```
 
-En moyenne, la partie concernée par un paragraphe est trouvée dans **`r round(100 * dt_sampled_with_predictions[, mean(predicted_side == side)], 2)`%** des **`r nrow(dt_sampled_with_predictions)`** paragraphes.
+En moyenne, la partie concernée par un paragraphe est trouvée dans **`r round(100 * dt_cleaned[test_rows, mean(predicted_side == side)], 2)`%** des **`r length(test_rows)`** paragraphes.
