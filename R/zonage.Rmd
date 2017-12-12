@@ -33,6 +33,19 @@ print(head(dt))
 
 Il y a **`r nrow(dt)`** paragraphes dans le jeu de données.
 
+## Retrait des paragraphes doublons
+
+Certains paragraphes sont doublement annotés pour calculer l'inter-agreement.  
+Ils sont retirés.
+
+```{R remove_duplicates}
+dt <- local({
+  duplicated_files <- dt[,.N,.(file, dir)][, .(duplicated = duplicated(file), file, dir)][duplicated == TRUE]
+  dt_with_duplicated_info <- merge(dt, duplicated_files, all.x = TRUE)
+  dt_with_duplicated_info[is.na(duplicated)]
+})
+```
+
 ## Comptage des types
 
 Ce comptage est fait avant le retrait de certaines catégories et/ou compression de plusieurs types en 1.  
@@ -42,7 +55,7 @@ Il s'agit de donner un aperçu de la répartition des données brutes.
 datatable(dt[, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N), types][, `%` := round(100 * nb_decisions / sum(nb_decisions), 2)])
 ```
 
-## Répartition des difficultés
+## Répartition de la difficulté d'annotation
 
 Les annotateurs ont noté la difficulté d'annoter chaque décision.
 
@@ -56,7 +69,9 @@ Le retrait de ces décisions ne change pas de façon significative les résultat
 ## Retrait de certaines catégories
 
 Certains types sont regroupés.  
-Les paragraphes typés `n_a` sont conservés.
+Les paragraphes typés `n_a` sont conservés.  
+Leur retrait améliore considérablement la qualité des prédictions.  
+Il est possible que nombre de paragraphes en `n_a` ne devrait pas l'être.
 
 ```{R simplify_tags}
 # remove paragraph type position
@@ -87,12 +102,20 @@ dt[, appelant := stri_detect_fixed(types, "_appelant")]
 stopifnot(dt[, sum(intime & appelant)] == 0)
 
 dt[, side := ifelse(intime | appelant, ifelse(appelant, "appelant", "intime"), "aucun")]
+
+# Extract the first 20% and the last 20% of each decision
+dt <- local({
+  intro <- dt[position < 0.2, .(intro = paste(text, collapse = "\n")), file]
+  merge(dt, intro, by = "file")
+})
 ```
 
 ## Préparation des données
 
 La transformation des paragraphes pour l'apprentissage consiste essentiellement à ajouter les paragraphes qui précèdent et suivent sous forme de contexte.  
-Présentement, les 3 paragraphes précédents et suivant sont ajoutés. Pour permettre au modèle de les distinguer du paragraphe à prédire, un préfixe est ajouté à chaque mot du contexte. Cette méthode augmente les résultats de plus de 10 points en fonction des tâches.
+Présentement, les 3 paragraphes précédents et suivant sont ajoutés. Pour permettre au modèle de les distinguer du paragraphe à prédire, un préfixe est ajouté à chaque mot du contexte. Cette méthode augmente les résultats de plus de 10 points en fonction des tâches.  
+
+L'introduction de chaque décision (dans notre cas les 20 premiers %) renseigne en général sur la nature des parties, elle est extraite de chaque décision. L'ajout de la position ne semble pas beaucoup aider lorsque l'introduction est en contexte mais est importante lorsqu'elle est absente (+1/+2 points selon les taches).
 
 ```{R text_preprocessing}
 add_prefix <- function(prefix, labels) {
@@ -120,7 +143,7 @@ swipe_features <- function(file, text, nbr) {
 }
 
 dt[, text := stri_replace_all_regex(tolower(text), pattern = "[:punct:]", replacement = " ")]
-dt[, features_without_label := paste(swipe_features(file, text, 3), swipe_features(file, text, 2), swipe_features(file, text, 1), text, swipe_features(file, text, -1), swipe_features(file, text, -2), swipe_features(file, text, -3))]
+dt[, `:=`(features_without_label = paste(swipe_features(file, text, 3), swipe_features(file, text, 2), swipe_features(file, text, 1), text, swipe_features(file, text, -1), swipe_features(file, text, -2), swipe_features(file, text, -3)), features_intro = add_prefix("intro_", intro), features_position = paste0("position_paragraphe_", 10 * round(position, 1)))]
 
 train_rows <- seq(0.8 * nrow(dt))
 test_rows <- seq(max(train_rows) + 1, nrow(dt))
@@ -143,9 +166,8 @@ print(dt[4, features_without_label])
 On essaye ci-dessous de deviner la nature du paragraphe.
 
 ```{R paragraph_types_learning}
-
 local({
-  dt[, features_with_type_label := paste(add_prefix("__label__", types_clean_micro), features_without_label)]
+  dt[, features_with_type_label := paste(add_prefix("__label__", types_clean_micro), features_without_label, features_intro, features_position)]
   temp_file_train <- tempfile()
   temp_file_model <- tempfile()
   writeLines(dt[train_rows, sample(features_with_type_label)], con = temp_file_train)
@@ -159,16 +181,15 @@ local({
 })
 ```
 
-En moyenne, le bon type est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_labels == types_clean_micro)], 2)`%** des **`r length(test_rows)`** paragraphes.
+En moyenne, le bon type est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_labels == types_clean_micro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
 
 ## Typage macro
 
 Des tags macro sont présents dans le fichier.
 
 ```{R paragraph_types_macro_learning}
-
 local({
-  dt[, features_with_type_macro := paste(add_prefix("__label__", types_macro), features_without_label)]
+  dt[, features_with_type_macro := paste(add_prefix("__label__", types_macro), features_without_label, features_intro, features_position)]
   temp_file_train <- tempfile()
   temp_file_model <- tempfile()
   writeLines(dt[train_rows, sample(features_with_type_macro)], con = temp_file_train)
@@ -179,14 +200,15 @@ local({
   dt[test_rows, predicted_labels_macro := names(predictions)]
   datatable(dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(types_macro == predicted_labels_macro), 2)), types_macro])
 })
-
 ```
 
-En moyenne, le bon type macro est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_labels_macro == types_macro)], 2)`%** des **`r length(test_rows)`** paragraphes.
+En moyenne, le bon type macro est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_labels_macro == types_macro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
 
 ## Partie concernée par un paragraphe
 
-On essaye de prédire qui est lié au paragraphe.
+On essaye de prédire qui est lié au paragraphe.  
+Le retrait de l'introduction et de la position semble aider (+5 points sur appelant et intimé).  
+Cela impliquerait un overfit ?
 
 ```{R paragraph_side_learning}
 local({
@@ -203,4 +225,4 @@ local({
 })
 ```
 
-En moyenne, la partie concernée par un paragraphe est trouvée dans **`r round(100 * dt[test_rows, mean(predicted_side == side)], 2)`%** des **`r length(test_rows)`** paragraphes.
+En moyenne, la partie concernée par un paragraphe est trouvée dans **`r round(100 * dt[test_rows, mean(predicted_side == side)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
