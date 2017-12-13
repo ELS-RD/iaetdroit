@@ -205,7 +205,7 @@ learn_predict <- function(features){
 
 display_prediction_accuracy <- function(pred_of_label, label_to_pred){
     tab <- dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(get(label_to_pred) == get(pred_of_label)), 2)), get(label_to_pred)]
-    datatable(tab)
+    datatable(tab[order(-accuracy)])
 }
 
 dt[, features_with_type_label := paste(add_prefix("__label__", types_clean_micro), features_without_label, features_intro, features_position)]
@@ -219,8 +219,8 @@ Les erreurs se décomposent de la façon suivante :
 
 ```{R error_type_micro}
 display_errors <- function(type_to_predict, prediction) {
-  errors_dt <- dt[test_rows][type_to_predict != prediction, .(nb_erreurs = .N), prediction][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)][order(-nb_erreurs)]
-  datatable(errors_dt)
+  errors_dt <- dt[test_rows][, `to predict -> prediction` := paste(get(type_to_predict), "->", get(prediction))][get(type_to_predict) != get(prediction), .(nb_erreurs = .N), `to predict -> prediction`][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)]
+  datatable(errors_dt[order(-nb_erreurs)])
 }
 display_errors(type_to_predict = "types_clean_micro", prediction = "predicted_paragraph_micro")
 ```
