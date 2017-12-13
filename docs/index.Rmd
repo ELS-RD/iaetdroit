@@ -1,5 +1,5 @@
 ---
-title: "Zonage des décisions - IA et Droit"
+title: "Zonage des décisions - IA & Droit"
 author: "Michaël Benesty"
 date: "`r format(Sys.time(), '%d %B %Y')`"
 output:
@@ -82,14 +82,12 @@ datatable(dt[, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisio
 
 ## Répartition de la difficulté d'annotation
 
-Les annotateurs ont noté la difficulté d'annoter chaque décision.
+Les annotateurs ont noté la difficulté d'annoter chaque décision.  
+Les décisions jugées impossibles à annoter ont été exclues du `CSV`.  
 
 ```{R difficulties}
 datatable(dt[, .(nb_paragraphes = .N), annotation_difficulty][, `%` := round(100 * nb_paragraphes / sum(nb_paragraphes), 2)])
 ```
-
-Les décisions jugées difficiles à annoter sont conservées dans le jeu de données.  
-Le retrait de ces décisions ne change pas de façon significative les résultats.
 
 ## Groupement de certains types
 
@@ -175,6 +173,12 @@ dt[, `:=`(features_without_label = paste(swipe_features(file, text, 3), swipe_fe
 train_rows <- seq(0.8 * nrow(dt))
 test_rows <- seq(max(train_rows) + 1, nrow(dt))
 ```
+
+L'ajout de l'ensemble de la décision en contexte peut sembler naturelle mais n'apporterait pas grand chose à la classification de chaque paragraphe :
+
+* il n'y a plus de lien direct entre le paragraphe à caractériser et ce contexte large ;
+* l'information sur la nature de la décision se trouve déjà, dans les grandes lignes, dans l'introduction déjà donnée en contexte ;
+* tous les paragraphes d'une même décision auraient le même contexte, ce contexte serait ignoré par l'algorithme.
 
 ### Paragraphe avec contexte tel que vu par l'algorithme
 
