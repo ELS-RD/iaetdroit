@@ -1,0 +1,7 @@
+name: "IA_et_Droit"
+output_dir: "."
+navbar:
+  title: "IA & Droit"
+  left:
+    - text: "Baseline"
+      href: index.html

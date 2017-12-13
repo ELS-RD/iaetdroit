@@ -1,12 +1,35 @@
 ---
-title: "Zonage des décisions"
+title: "Zonage des décisions - IA et Droit"
 author: "Michaël Benesty"
 date: "`r format(Sys.time(), '%d %B %Y')`"
-output: html_document
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    code_folding: show
+    fig_width: 8
+    fig_height: 6 
+    toc: true
+    number_sections: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
 ---
 
-Pour cet exercice, il n'y a pas eu de recherche des hyper-paramètres qui pourraient être améliorés.  
-L'approche choisie est une classification multiclass avec `fastrtext`.  
+L'objet du projet [IA & Droit](http://openlaw.fr/travaux/communs-numeriques/ia-droit-datasets-dapprentissage) porté par l'association [Open Law](http://openlaw.fr/) est de créer un jeu de données qui permette de zoner les décisions de justice des Cours d'appel Françaises.
+Le présent document est une illustration d'une baseline de résultat pour ce jeu de données.
+
+La tâche consiste à qualifier chaque paragraphe d'une décision de justice selon un [plan prédéfini](https://github.com/pommedeterresautee/iaetdroit/releases) établie par les membres d'Open Law et la Cour de cassation.  
+
+Pour rappel le dépot des données et du code source du projet est [ici](https://github.com/pommedeterresautee/iaetdroit).  
+En particulier, les données brutes et déjà parsées et sérialisées au format CSV sont [ici](https://github.com/pommedeterresautee/iaetdroit/releases).
+
+Pour cet exercice, il n'y a pas eu de recherche des hyper-paramètres qui pourraient être facilement améliorés.  
+Il est su de l'auteur de ce code que de simples modifications de ce code source (augmentation des epoch, des ngrams, etc.) permet de gagner de 1 à plusieurs points sur chaque tâche de classification.  
+Il est su de l'auteur de ce code que de ne pas différencier test set et dev set, c'est foncièrement mal.  
+C'est la raison pour laquelle il est important de **prendre les présents résultats comme indicatifs** de ce qui peut être fait.  
+
+L'approche choisie est une classification multiclass avec [`fastrtext`](https://github.com/pommedeterresautee/fastrtext/).  
 Les prédiction des types de chaque paragraphe (micro et macro) sont séparées de la prédiction de la partie concernée.
 
 # Pré-traitements
@@ -115,7 +138,9 @@ dt <- local({
 La transformation des paragraphes pour l'apprentissage consiste essentiellement à ajouter les paragraphes qui précèdent et suivent sous forme de contexte.  
 Présentement, les 3 paragraphes précédents et suivant sont ajoutés. Pour permettre au modèle de les distinguer du paragraphe à prédire, un préfixe est ajouté à chaque mot du contexte. Cette méthode augmente les résultats de plus de 10 points en fonction des tâches.  
 
-L'introduction de chaque décision (dans notre cas les 20 premiers %) renseigne en général sur la nature des parties, elle est extraite de chaque décision. L'ajout de la position ne semble pas beaucoup aider lorsque l'introduction est en contexte mais est importante lorsqu'elle est absente (+1/+2 points selon les taches).
+L'introduction de chaque décision (dans notre cas les 20 premiers % de chaque décision) renseigne en général sur la nature des parties et sa thématique, pour cette raison elle est aussi ajoutée au contexte de chaque paragraphe.
+
+L'ajout de la position du paragraphe dans la décision (par tranche de 10%) ne semble pas aider la prédiction lorsque l'introduction est en contexte mais produit un effet lorsque l'introduction n'est pas ajoutée au contexte (+1/+2 points selon les taches).
 
 ```{R text_preprocessing}
 add_prefix <- function(prefix, labels) {
@@ -177,11 +202,23 @@ local({
   predicted_labels <- names(predictions)
   invisible(assert_that(length(test_rows) == length(predicted_labels)))
   dt[test_rows, predicted_labels := predicted_labels]
-  datatable(dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(predicted_labels == types_clean_micro), 2)), types_clean_micro])
+  local({
+    tab <- dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(predicted_labels == types_clean_micro), 2)), types_clean_micro]
+    datatable(tab)
+  })
 })
 ```
 
 En moyenne, le bon type est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_labels == types_clean_micro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
+
+Les erreurs se décomposent de la façon suivante :
+
+```{R error_type_micro}
+local({
+  errors_dt <- dt[test_rows][types_clean_micro != predicted_labels, .(nb_erreurs = .N), predicted_labels][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)][order(-nb_erreurs)]
+  datatable(errors_dt)
+})
+```
 
 ## Typage macro
 
@@ -203,6 +240,15 @@ local({
 ```
 
 En moyenne, le bon type macro est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_labels_macro == types_macro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
+
+Les erreurs se décomposent de la façon suivante :
+
+```{R error_type_macro}
+local({
+  errors_dt <- dt[test_rows][types_macro != predicted_labels_macro, .(nb_erreurs = .N), predicted_labels_macro][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)][order(-nb_erreurs)]
+  datatable(errors_dt)
+})
+```
 
 ## Partie concernée par un paragraphe
 
@@ -226,3 +272,12 @@ local({
 ```
 
 En moyenne, la partie concernée par un paragraphe est trouvée dans **`r round(100 * dt[test_rows, mean(predicted_side == side)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
+
+Les erreurs se décomposent de la façon suivante :
+
+```{R error_side}
+local({
+  errors_dt <- dt[test_rows][side != predicted_side, .(nb_erreurs = .N), predicted_side][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)][order(-nb_erreurs)]
+  datatable(errors_dt)
+})
+```
