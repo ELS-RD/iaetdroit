@@ -50,6 +50,8 @@ set.seed(123)
 
 ```{R read_data}
 dt <- fread(input = "./annotations-clean.csv", encoding = "UTF-8")
+setnames(dt, c("types", "types_macro"), c("paragraph_type_micro", "paragraph_type_macro"))
+
 print(head(dt))
 
 ```
@@ -75,7 +77,7 @@ Ce comptage est fait avant le retrait de certaines catégories et/ou compression
 Il s'agit de donner un aperçu de la répartition des données brutes.
 
 ```{R display_raw_types}
-datatable(dt[, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N), types][, `%` := round(100 * nb_decisions / sum(nb_decisions), 2)])
+datatable(dt[, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N), paragraph_type_micro][, `%` := round(100 * nb_decisions / sum(nb_decisions), 2)])
 ```
 
 ## Répartition de la difficulté d'annotation
@@ -89,37 +91,37 @@ datatable(dt[, .(nb_paragraphes = .N), annotation_difficulty][, `%` := round(100
 Les décisions jugées difficiles à annoter sont conservées dans le jeu de données.  
 Le retrait de ces décisions ne change pas de façon significative les résultats.
 
-## Retrait de certaines catégories
+## Groupement de certains types
 
-Certains types sont regroupés.  
+Certains micro types de paragraphes sont regroupés.  
 Les paragraphes typés `n_a` sont conservés.  
 Leur retrait améliore considérablement la qualité des prédictions.  
-Il est possible que nombre de paragraphes en `n_a` ne devrait pas l'être.
+Il est possible qu'un certain nombre de paragraphes `n_a` ne devraient pas l'être.
 
 ```{R simplify_tags}
 # remove paragraph type position
-dt[, types_clean_micro := stri_replace_all_regex(types, "-\\d+", "")]
+dt[, paragraph_type_micro_cleaned := stri_replace_all_regex(paragraph_type_micro, "-\\d+", "")]
 
 # remove double labels due to numbers
 make_unique_labels <- function(label) {
   paste(sort(unique(unlist(stri_split_fixed(label, pattern = " ")))), collapse = " ")
 }
 
-dt[, types_clean_micro := sapply(types_clean_micro, make_unique_labels)]
+dt[, paragraph_type_micro_cleaned := sapply(paragraph_type_micro_cleaned, make_unique_labels)]
 
 # rationalizing motifs and dispositifs
-dt[, types_clean_micro := ifelse(stri_detect_regex(types_clean_micro, "^Motif"), ifelse(stri_detect_fixed(types_clean_micro, "Motif_texte"), "Motif_texte", "Motif"), types_clean_micro)]
-dt[types_clean_micro == "Dispositif-demandes_accessoires", types_clean_micro := "Dispositif_demandes_accessoires"]
-dt[types_clean_micro == "Dispositif Dispositif-demandes_accessoires", types_clean_micro := "Dispositif_demandes_accessoires"]
-dt[types_clean_micro == "Contenu_decision_attaquee Expose_litige", types_clean_micro := "Contenu_decision_attaquee_Expose_litige"]
-dt[types_clean_micro == "Entete_appelant Entete_avocat", types_clean_micro := "Entete_appelant_avec_avocat"]
-dt[types_clean_micro == "Entete_avocat Entete_intime", types_clean_micro := "Entete_intime_avec_avocat"]
-dt[, types_clean_micro := stri_replace_all_regex(types_clean_micro, "_intime|_appelant", "")]
+dt[, paragraph_type_micro_cleaned := ifelse(stri_detect_regex(paragraph_type_micro_cleaned, "^Motif"), ifelse(stri_detect_fixed(paragraph_type_micro_cleaned, "Motif_texte"), "Motif_texte", "Motif"), paragraph_type_micro_cleaned)]
+dt[paragraph_type_micro_cleaned == "Dispositif-demandes_accessoires", paragraph_type_micro_cleaned := "Dispositif_demandes_accessoires"]
+dt[paragraph_type_micro_cleaned == "Dispositif Dispositif-demandes_accessoires", paragraph_type_micro_cleaned := "Dispositif_demandes_accessoires"]
+dt[paragraph_type_micro_cleaned == "Contenu_decision_attaquee Expose_litige", paragraph_type_micro_cleaned := "Contenu_decision_attaquee_Expose_litige"]
+dt[paragraph_type_micro_cleaned == "Entete_appelant Entete_avocat", paragraph_type_micro_cleaned := "Entete_appelant_avec_avocat"]
+dt[paragraph_type_micro_cleaned == "Entete_avocat Entete_intime", paragraph_type_micro_cleaned := "Entete_intime_avec_avocat"]
+dt[, paragraph_type_micro_cleaned := stri_replace_all_regex(paragraph_type_micro_cleaned, "_intime|_appelant", "")]
 
-dt[, position := as.numeric(seq(types_clean_micro)) / length(types_clean_micro), file]
+dt[, position := as.numeric(seq(paragraph_type_micro_cleaned)) / length(paragraph_type_micro_cleaned), file]
 
-dt[, intime := stri_detect_fixed(types, "_intime")]
-dt[, appelant := stri_detect_fixed(types, "_appelant")]
+dt[, intime := stri_detect_fixed(paragraph_type_micro, "_intime")]
+dt[, appelant := stri_detect_fixed(paragraph_type_micro, "_appelant")]
 
 # check that no paragraph are related to both types.
 stopifnot(dt[, sum(intime & appelant)] == 0)
@@ -174,7 +176,7 @@ train_rows <- seq(0.8 * nrow(dt))
 test_rows <- seq(max(train_rows) + 1, nrow(dt))
 ```
 
-### Affichage d'un exemple de paragraphe.
+### Paragraphe avec contexte tel que vu par l'algorithme
 
 ```{R example}
 # Original text, paragraphs 1 to 7
@@ -187,6 +189,8 @@ print(dt[4, features_without_label])
 # Apprentissages
 
 ## Typage des paragraphes
+
+### Micro typage
 
 On essaye ci-dessous de deviner la nature du paragraphe.
 
@@ -205,15 +209,16 @@ learn_predict <- function(features){
 
 display_prediction_accuracy <- function(pred_of_label, label_to_pred){
     tab <- dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(get(label_to_pred) == get(pred_of_label)), 2)), get(label_to_pred)]
+    setnames(tab, old = "get", label_to_pred)
     datatable(tab[order(-accuracy)])
 }
 
-dt[, features_with_type_label := paste(add_prefix("__label__", types_clean_micro), features_without_label, features_intro, features_position)]
+dt[, features_with_type_label := paste(add_prefix("__label__", paragraph_type_micro_cleaned), features_without_label, features_intro, features_position)]
 dt[test_rows, predicted_paragraph_micro := learn_predict(features = "features_with_type_label")]
-display_prediction_accuracy(pred_of_label = "predicted_paragraph_micro", label_to_pred = "types_clean_micro")
+display_prediction_accuracy(pred_of_label = "predicted_paragraph_micro", label_to_pred = "paragraph_type_micro_cleaned")
 ```
 
-En moyenne, le bon type est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_paragraph_micro == types_clean_micro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
+En moyenne, le bon type est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_paragraph_micro == paragraph_type_micro_cleaned)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
 
 Les erreurs se décomposent de la façon suivante :
 
@@ -222,25 +227,25 @@ display_errors <- function(type_to_predict, prediction) {
   errors_dt <- dt[test_rows][, `to predict -> prediction` := paste(get(type_to_predict), "->", get(prediction))][get(type_to_predict) != get(prediction), .(nb_erreurs = .N), `to predict -> prediction`][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)]
   datatable(errors_dt[order(-nb_erreurs)])
 }
-display_errors(type_to_predict = "types_clean_micro", prediction = "predicted_paragraph_micro")
+display_errors(type_to_predict = "paragraph_type_micro_cleaned", prediction = "predicted_paragraph_micro")
 ```
 
-## Typage macro
+### Macro typage
 
 Des tags macro sont présents dans le fichier.
 
-```{R paragraph_types_macro_learning}
-dt[, features_with_type_macro := paste(add_prefix("__label__", types_macro), features_without_label, features_intro, features_position)]
+```{R paragraph_paragraph_type_macro_learning}
+dt[, features_with_type_macro := paste(add_prefix("__label__", paragraph_type_macro), features_without_label, features_intro, features_position)]
 dt[test_rows, predicted_paragraph_macro := learn_predict(features = "features_with_type_macro")]
-display_prediction_accuracy(pred_of_label = "predicted_paragraph_macro", label_to_pred = "types_macro")
+display_prediction_accuracy(pred_of_label = "predicted_paragraph_macro", label_to_pred = "paragraph_type_macro")
 ```
 
-En moyenne, le bon type macro est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_paragraph_macro == types_macro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
+En moyenne, le bon type macro est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_paragraph_macro == paragraph_type_macro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
 
 Les erreurs se décomposent de la façon suivante :
 
 ```{R error_type_macro}
-  display_errors(type_to_predict = "types_macro", prediction = "predicted_paragraph_macro")
+  display_errors(type_to_predict = "paragraph_type_macro", prediction = "predicted_paragraph_macro")
 ```
 
 ## Partie concernée par un paragraphe
