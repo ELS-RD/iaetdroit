@@ -190,34 +190,39 @@ print(dt[4, features_without_label])
 
 On essaye ci-dessous de deviner la nature du paragraphe.
 
-```{R paragraph_types_learning}
-local({
-  dt[, features_with_type_label := paste(add_prefix("__label__", types_clean_micro), features_without_label, features_intro, features_position)]
+```{R paragraph_micro_types_learning}
+learn_predict <- function(features){
   temp_file_train <- tempfile()
   temp_file_model <- tempfile()
-  writeLines(dt[train_rows, sample(features_with_type_label)], con = temp_file_train)
+  writeLines(dt[train_rows, sample(get(features))], con = temp_file_train)
   execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 2, "-verbose", 0))
   model <- load_model(temp_file_model)
-  predictions <- predict(model, sentences = dt[test_rows][, features_with_type_label], simplify = TRUE)
+  predictions <- predict(model, sentences = dt[test_rows][, get(features)], simplify = TRUE)
   predicted_labels <- names(predictions)
   invisible(assert_that(length(test_rows) == length(predicted_labels)))
-  dt[test_rows, predicted_labels := predicted_labels]
-  local({
-    tab <- dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(predicted_labels == types_clean_micro), 2)), types_clean_micro]
+  predicted_labels
+}
+
+display_prediction_accuracy <- function(pred_of_label, label_to_pred){
+    tab <- dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(get(label_to_pred) == get(pred_of_label)), 2)), get(label_to_pred)]
     datatable(tab)
-  })
-})
+}
+
+dt[, features_with_type_label := paste(add_prefix("__label__", types_clean_micro), features_without_label, features_intro, features_position)]
+dt[test_rows, predicted_paragraph_micro := learn_predict(features = "features_with_type_label")]
+display_prediction_accuracy(pred_of_label = "predicted_paragraph_micro", label_to_pred = "types_clean_micro")
 ```
 
-En moyenne, le bon type est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_labels == types_clean_micro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
+En moyenne, le bon type est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_paragraph_micro == types_clean_micro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
 
 Les erreurs se décomposent de la façon suivante :
 
 ```{R error_type_micro}
-local({
-  errors_dt <- dt[test_rows][types_clean_micro != predicted_labels, .(nb_erreurs = .N), predicted_labels][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)][order(-nb_erreurs)]
+display_errors <- function(type_to_predict, prediction) {
+  errors_dt <- dt[test_rows][type_to_predict != prediction, .(nb_erreurs = .N), prediction][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)][order(-nb_erreurs)]
   datatable(errors_dt)
-})
+}
+display_errors(type_to_predict = "types_clean_micro", prediction = "predicted_paragraph_micro")
 ```
 
 ## Typage macro
@@ -225,29 +230,17 @@ local({
 Des tags macro sont présents dans le fichier.
 
 ```{R paragraph_types_macro_learning}
-local({
-  dt[, features_with_type_macro := paste(add_prefix("__label__", types_macro), features_without_label, features_intro, features_position)]
-  temp_file_train <- tempfile()
-  temp_file_model <- tempfile()
-  writeLines(dt[train_rows, sample(features_with_type_macro)], con = temp_file_train)
-  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 2, "-verbose", 0))
-  model <- load_model(temp_file_model)
-  predictions <- predict(model, sentences = dt[test_rows, features_with_type_macro], simplify = TRUE)
-  invisible(assert_that(length(test_rows) == length(predictions)))
-  dt[test_rows, predicted_labels_macro := names(predictions)]
-  datatable(dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(types_macro == predicted_labels_macro), 2)), types_macro])
-})
+dt[, features_with_type_macro := paste(add_prefix("__label__", types_macro), features_without_label, features_intro, features_position)]
+dt[test_rows, predicted_paragraph_macro := learn_predict(features = "features_with_type_macro")]
+display_prediction_accuracy(pred_of_label = "predicted_paragraph_macro", label_to_pred = "types_macro")
 ```
 
-En moyenne, le bon type macro est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_labels_macro == types_macro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
+En moyenne, le bon type macro est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_paragraph_macro == types_macro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
 
 Les erreurs se décomposent de la façon suivante :
 
 ```{R error_type_macro}
-local({
-  errors_dt <- dt[test_rows][types_macro != predicted_labels_macro, .(nb_erreurs = .N), predicted_labels_macro][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)][order(-nb_erreurs)]
-  datatable(errors_dt)
-})
+  display_errors(type_to_predict = "types_macro", prediction = "predicted_paragraph_macro")
 ```
 
 ## Partie concernée par un paragraphe
@@ -257,18 +250,9 @@ Le retrait de l'introduction et de la position semble aider (+5 points sur appel
 Cela impliquerait un overfit ?
 
 ```{R paragraph_side_learning}
-local({
-  dt[, features_with_side_label := paste(add_prefix("__label__", side), features_without_label)]
-  temp_file_train <- tempfile()
-  temp_file_model <- tempfile()
-  writeLines(dt[train_rows, sample(features_with_side_label)], con = temp_file_train)
-  execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 2, "-verbose", 0))
-  model <- load_model(temp_file_model)
-  predictions <- predict(model, sentences = dt[test_rows, features_with_side_label], simplify = TRUE)
-  invisible(assert_that(length(test_rows) == length(predictions)))
-  dt[test_rows, predicted_side := names(predictions)]
-  datatable(dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(predicted_side == side), 2)), side])
-})
+dt[, features_with_side_label := paste(add_prefix("__label__", side), features_without_label)]
+dt[test_rows, predicted_side := learn_predict(features = "features_with_side_label")]
+display_prediction_accuracy(pred_of_label = "predicted_side", label_to_pred = "side")
 ```
 
 En moyenne, la partie concernée par un paragraphe est trouvée dans **`r round(100 * dt[test_rows, mean(predicted_side == side)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
@@ -276,8 +260,5 @@ En moyenne, la partie concernée par un paragraphe est trouvée dans **`r round(
 Les erreurs se décomposent de la façon suivante :
 
 ```{R error_side}
-local({
-  errors_dt <- dt[test_rows][side != predicted_side, .(nb_erreurs = .N), predicted_side][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)][order(-nb_erreurs)]
-  datatable(errors_dt)
-})
+display_errors(type_to_predict = "side", prediction = "predicted_side")
 ```

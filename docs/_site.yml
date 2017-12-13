@@ -1,7 +1,12 @@
-name: "IA_et_Droit"
-output_dir: "."
+name: IA_et_Droit
+output_dir: '.'
 navbar:
-  title: "IA & Droit"
+  title: IA & Droit
   left:
-    - text: "Baseline"
-      href: index.html
+  - text: Baseline
+    href: index.html
+output:
+  html_document:
+    lib_dir: site_libs
+    self_contained: no
+
