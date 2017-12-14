@@ -6,7 +6,7 @@ output:
   html_document:
     theme: united
     highlight: tango
-    code_folding: show
+    code_folding: hide
     fig_width: 8
     fig_height: 6 
     toc: true
@@ -34,22 +34,24 @@ Les prédiction des types de chaque paragraphe (micro et macro) sont séparées 
 
 # Pré-traitements
 
-## Chargement des librairies
+## Chargement des librairies et lecture des données
 
-```{R lib_loading}
-library(data.table)
+Les données sont chargées depuis le `CSV`.  
+Ci-dessous nous affichons les premières lignes.
+
+```{R load_lib_and_read_data}
+suppressMessages(library(data.table))
+suppressMessages(library(corrplot))
 library(DT)
 library(fastrtext)
 library(stringi)
 library(assertthat)
-library(ggplot2)
+
+# for reproductability
 set.seed(123)
-``` 
 
-## Lecture des données
-
-```{R read_data}
 dt <- fread(input = "./annotations-clean.csv", encoding = "UTF-8")
+# rename some cols
 setnames(dt, c("types", "types_macro"), c("paragraph_type_micro", "paragraph_type_macro"))
 
 print(head(dt))
@@ -60,8 +62,8 @@ Il y a **`r nrow(dt)`** paragraphes dans le jeu de données.
 
 ## Retrait des paragraphes doublons
 
-Certains paragraphes sont doublement annotés pour calculer l'inter-agreement.  
-Ils sont retirés.
+Il y a `r dt[,.N,.(file, dir)][,sum(duplicated(file))] * 2` documents doublement annotés pour calculer l'inter-agreement.  
+Les doublons sont retirés.
 
 ```{R remove_duplicates}
 dt <- local({
@@ -70,6 +72,8 @@ dt <- local({
   dt_with_duplicated_info[is.na(duplicated)]
 })
 ```
+
+Les documents en doublons étant retirés, il reste `r nrow(dt)` paragraphes.
 
 ## Comptage des types
 
@@ -194,9 +198,19 @@ print(dt[4, features_without_label])
 
 ## Typage des paragraphes
 
+Deux typages peuvent être appris :
+
+* un micro typage qui renseigne sur la nature du contenu de chaque paragraphe ;
+* un typage davantage macro qui permet d'avoir une idée du plan de la décision.
+
 ### Micro typage
 
-On essaye ci-dessous de deviner la nature du paragraphe.
+On essaye ci-dessous de deviner la nature du contenu du paragraphe.  
+Pour cela on va utiliser toutes les informations à notre disposition :
+
+* le contenu du paragraphe ;
+* ses différents contextes ;
+* sa position.
 
 ```{R paragraph_micro_types_learning}
 learn_predict <- function(features){
@@ -204,7 +218,7 @@ learn_predict <- function(features){
   temp_file_model <- tempfile()
   writeLines(dt[train_rows, sample(get(features))], con = temp_file_train)
   execute(commands = c("supervised", "-input", temp_file_train, "-output", temp_file_model, "-dim", 10, "-lr", 1, "-epoch", 20, "-wordNgrams", 2, "-verbose", 0))
-  model <- load_model(temp_file_model)
+  model <- suppressMessages(load_model(temp_file_model))
   predictions <- predict(model, sentences = dt[test_rows][, get(features)], simplify = TRUE)
   predicted_labels <- names(predictions)
   invisible(assert_that(length(test_rows) == length(predicted_labels)))
@@ -224,19 +238,33 @@ display_prediction_accuracy(pred_of_label = "predicted_paragraph_micro", label_t
 
 En moyenne, le bon type est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_paragraph_micro == paragraph_type_micro_cleaned)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
 
-Les erreurs se décomposent de la façon suivante :
+Les prédictions se répartissent de la façon suivante :
 
 ```{R error_type_micro}
 display_errors <- function(type_to_predict, prediction) {
-  errors_dt <- dt[test_rows][, `to predict -> prediction` := paste(get(type_to_predict), "->", get(prediction))][get(type_to_predict) != get(prediction), .(nb_erreurs = .N), `to predict -> prediction`][, `%` := 100 * round(nb_erreurs / sum(nb_erreurs), 4)]
-  datatable(errors_dt[order(-nb_erreurs)])
+  errors_dt <- dt[test_rows][, .(error = get(type_to_predict) != get(prediction), type_to_predict = get(type_to_predict), prediction = get(prediction))]
+  corr_dt <- dcast(errors_dt, type_to_predict ~ prediction, value.var = "error", fun.aggregate = length)
+  rows <- corr_dt[[1]]
+  corr_mat <- as.matrix(corr_dt[,-1])
+  rownames(corr_mat) <- rows
+  corr_mat_percent <- corr_mat / rowSums(corr_mat)
+  corrplot(corr_mat_percent, is.corr = FALSE, cl.lim = c(0, 1), tl.col = "black", tl.srt = 45, method = "color")
 }
+
 display_errors(type_to_predict = "paragraph_type_micro_cleaned", prediction = "predicted_paragraph_micro")
 ```
 
+> Lignes = classe à prédire  
+> Colonnes = classe prédite
+
 ### Macro typage
 
-Des tags macro sont présents dans le fichier.
+On essaye ci-dessous de deviner la partie de la décision à laquelle chaque paragraphe appartient.  
+Pour cela on va utiliser toutes les informations à notre disposition :
+
+* le contenu du paragraphe ;
+* ses différents contextes ;
+* sa position.
 
 ```{R paragraph_paragraph_type_macro_learning}
 dt[, features_with_type_macro := paste(add_prefix("__label__", paragraph_type_macro), features_without_label, features_intro, features_position)]
@@ -246,17 +274,26 @@ display_prediction_accuracy(pred_of_label = "predicted_paragraph_macro", label_t
 
 En moyenne, le bon type macro est trouvé dans **`r round(100 * dt[test_rows, mean(predicted_paragraph_macro == paragraph_type_macro)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
 
-Les erreurs se décomposent de la façon suivante :
+Les prédictions se répartissent de la façon suivante :
 
 ```{R error_type_macro}
   display_errors(type_to_predict = "paragraph_type_macro", prediction = "predicted_paragraph_macro")
 ```
 
+> Lignes = classe à prédire  
+> Colonnes = classe prédite
+
 ## Partie concernée par un paragraphe
 
-On essaye de prédire qui est lié au paragraphe.  
+Certains paragraphes rapportent les propos d'une des parties, dans d'autres il s'agit d'un rappel de la procédure ou c'est le magistrat qui s'exprime.  
+Ici on tente de deviner quelle partie au contentieux est concernée par chaque paragraphe.  
+
+Pour cela on va utiliser certaines informations à notre disposition :
+
+* le contenu du paragraphe ;
+* ses différents contextes (pargraphes qui suivent ou qui précèdent).
+
 Le retrait de l'introduction et de la position semble aider (+5 points sur appelant et intimé).  
-Cela impliquerait un overfit ?
 
 ```{R paragraph_side_learning}
 dt[, features_with_side_label := paste(add_prefix("__label__", side), features_without_label)]
@@ -266,8 +303,11 @@ display_prediction_accuracy(pred_of_label = "predicted_side", label_to_pred = "s
 
 En moyenne, la partie concernée par un paragraphe est trouvée dans **`r round(100 * dt[test_rows, mean(predicted_side == side)], 2)`%** des **`r length(test_rows)`** paragraphes utilisés pour les tests.
 
-Les erreurs se décomposent de la façon suivante :
+Les prédictions se répartissent de la façon suivante :
 
 ```{R error_side}
 display_errors(type_to_predict = "side", prediction = "predicted_side")
 ```
+
+> Lignes = classe à prédire  
+> Colonnes = classe prédite

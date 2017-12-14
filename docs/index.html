@@ -12,7 +12,7 @@
 <meta name="author" content="Michaël Benesty" />
 
 
-<title>Zonage des décisions - IA et Droit</title>
+<title>Zonage des décisions - IA &amp; Droit</title>
 
 <script src="site_libs/jquery-1.12.4/jquery.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -203,7 +203,7 @@ $(document).ready(function () {
 </style>
 <script>
 $(document).ready(function () {
-  window.initializeCodeFolding("show" === "show");
+  window.initializeCodeFolding("hide" === "show");
 });
 </script>
 
@@ -348,9 +348,9 @@ div.tocify {
 
 
 
-<h1 class="title toc-ignore">Zonage des décisions - IA et Droit</h1>
+<h1 class="title toc-ignore">Zonage des décisions - IA &amp; Droit</h1>
 <h4 class="author"><em>Michaël Benesty</em></h4>
-<h4 class="date"><em>13 décembre 2017</em></h4>
+<h4 class="date"><em>14 décembre 2017</em></h4>
 
 </div>
 
@@ -367,19 +367,22 @@ C’est la raison pour laquelle il est important de <strong>prendre les présent
 Les prédiction des types de chaque paragraphe (micro et macro) sont séparées de la prédiction de la partie concernée.</p>
 <div id="pre-traitements" class="section level1">
 <h1><span class="header-section-number">1</span> Pré-traitements</h1>
-<div id="chargement-des-librairies" class="section level2">
-<h2><span class="header-section-number">1.1</span> Chargement des librairies</h2>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(data.table)
+<div id="chargement-des-librairies-et-lecture-des-donnees" class="section level2">
+<h2><span class="header-section-number">1.1</span> Chargement des librairies et lecture des données</h2>
+<p>Les données sont chargées depuis le <code>CSV</code>.<br />
+Ci-dessous nous affichons les premières lignes.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">suppressMessages</span>(<span class="kw">library</span>(data.table))
+<span class="kw">suppressMessages</span>(<span class="kw">library</span>(corrplot))
 <span class="kw">library</span>(DT)
 <span class="kw">library</span>(fastrtext)
 <span class="kw">library</span>(stringi)
 <span class="kw">library</span>(assertthat)
-<span class="kw">library</span>(ggplot2)
-<span class="kw">set.seed</span>(<span class="dv">123</span>)</code></pre></div>
-</div>
-<div id="lecture-des-donnees" class="section level2">
-<h2><span class="header-section-number">1.2</span> Lecture des données</h2>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">dt &lt;-<span class="st"> </span><span class="kw">fread</span>(<span class="dt">input =</span> <span class="st">&quot;./annotations-clean.csv&quot;</span>, <span class="dt">encoding =</span> <span class="st">&quot;UTF-8&quot;</span>)
+
+<span class="co"># for reproductability</span>
+<span class="kw">set.seed</span>(<span class="dv">123</span>)
+
+dt &lt;-<span class="st"> </span><span class="kw">fread</span>(<span class="dt">input =</span> <span class="st">&quot;./annotations-clean.csv&quot;</span>, <span class="dt">encoding =</span> <span class="st">&quot;UTF-8&quot;</span>)
+<span class="co"># rename some cols</span>
 <span class="kw">setnames</span>(dt, <span class="kw">c</span>(<span class="st">&quot;types&quot;</span>, <span class="st">&quot;types_macro&quot;</span>), <span class="kw">c</span>(<span class="st">&quot;paragraph_type_micro&quot;</span>, <span class="st">&quot;paragraph_type_macro&quot;</span>))
 
 <span class="kw">print</span>(<span class="kw">head</span>(dt))</code></pre></div>
@@ -407,17 +410,18 @@ Les prédiction des types de chaque paragraphe (micro et macro) sont séparées 
 <p>Il y a <strong>38017</strong> paragraphes dans le jeu de données.</p>
 </div>
 <div id="retrait-des-paragraphes-doublons" class="section level2">
-<h2><span class="header-section-number">1.3</span> Retrait des paragraphes doublons</h2>
-<p>Certains paragraphes sont doublement annotés pour calculer l’inter-agreement.<br />
-Ils sont retirés.</p>
+<h2><span class="header-section-number">1.2</span> Retrait des paragraphes doublons</h2>
+<p>Il y a 120 documents doublement annotés pour calculer l’inter-agreement.<br />
+Les doublons sont retirés.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">dt &lt;-<span class="st"> </span><span class="kw">local</span>({
   duplicated_files &lt;-<span class="st"> </span>dt[,.N,.(file, dir)][, .(<span class="dt">duplicated =</span> <span class="kw">duplicated</span>(file), file, dir)][duplicated <span class="op">==</span><span class="st"> </span><span class="ot">TRUE</span>]
   dt_with_duplicated_info &lt;-<span class="st"> </span><span class="kw">merge</span>(dt, duplicated_files, <span class="dt">all.x =</span> <span class="ot">TRUE</span>)
   dt_with_duplicated_info[<span class="kw">is.na</span>(duplicated)]
 })</code></pre></div>
+<p>Les documents en doublons étant retirés, il reste 32744 paragraphes.</p>
 </div>
 <div id="comptage-des-types" class="section level2">
-<h2><span class="header-section-number">1.4</span> Comptage des types</h2>
+<h2><span class="header-section-number">1.3</span> Comptage des types</h2>
 <p>Ce comptage est fait avant le retrait de certaines catégories et/ou compression de plusieurs types en 1.<br />
 Il s’agit de donner un aperçu de la répartition des données brutes.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">datatable</span>(dt[, .(<span class="dt">nb_mots_moyen =</span> <span class="kw">round</span>(<span class="kw">mean</span>(<span class="kw">stri_count_words</span>(text))), <span class="dt">nb_decisions =</span> .N), paragraph_type_micro][, <span class="st">`</span><span class="dt">%</span><span class="st">`</span> <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="kw">round</span>(<span class="dv">100</span> <span class="op">*</span><span class="st"> </span>nb_decisions <span class="op">/</span><span class="st"> </span><span class="kw">sum</span>(nb_decisions), <span class="dv">2</span>)])</code></pre></div>
@@ -425,7 +429,7 @@ Il s’agit de donner un aperçu de la répartition des données brutes.</p>
 <script type="application/json" data-for="htmlwidget-49c968e2f00b87e48d74">{"x":{"filter":"none","data":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","46","47","48","49","50","51","52","53","54"],["n_a","References_decision_attaquee","Entete_appelant","Entete_avocat","Entete_intime","Entete_composition_de_la_cour","Faits_et_procedure","Moyens_et_pretentions_appelant","Moyens_et_pretentions_intime","Motif-1","Motif-1 Motif-appelant Motif-1_pretentions_appelant Motif-juge","Motif-1_texte Motif-1 Motif-regle_de_droit Motif-juge","Motif-2","Motif-3","Motif-3 Motif-faits Motif-3_faits Motif-juge","Motif-3 Motif-3_texte Motif-regle_de_droit Motif-juge","Dispositif-1","Dispositif-2","Dispositif-3","Dispositif-demandes_accessoires","Motif-appelant Motif-2 Motif-2_pretentions_appelant Motif-juge","Motif-2 Motif-regle_de_droit Motif-2_texte Motif-juge","Motif-demandes_accessoires","Motif-2 Motif-2_faits Motif-faits Motif-juge","Motif-3 Motif-intime Motif-3_pretentions_intime Motif-juge","Motif-1 Motif-1_faits Motif-faits Motif-juge","Dispositif-2 Dispositif-1","Motif-3 Motif-3_pretentions_appelant Motif-appelant Motif-juge","Entete_appelant Entete_avocat","Entete_intime Entete_avocat","Motif-1 Motif-1_pretentions_intime Motif-intime Motif-juge","Dispositif-2 Dispositif-3 Dispositif-1","Motif-2 Motif-intime Motif-2_pretentions_intime Motif-juge","Dispositif-2 Dispositif-3","Dispositif-3 Dispositif-1","Dispositif-2 Dispositif-demandes_accessoires Dispositif-1","Dispositif-2 Dispositif-demandes_accessoires","Motif-demandes_accessoires Motif-1","Dispositif-demandes_accessoires Dispositif-1","Motif-intime Motif-faits Motif-3_faits Motif-3 Motif-3_pretentions_intime Motif-juge","Dispositif-2 Motif-1","Motif-2 Dispositif-1","Moyens_et_pretentions_intime Entete_avocat","Motif-intime Moyens_et_pretentions_intime Motif-3 Motif-3_pretentions_intime Motif-juge","Moyens_et_pretentions_appelant ","Moyens_et_pretentions_appelant Entete_avocat","Motif-appelant Motif-faits Motif-3_faits Motif-3 Motif-3_pretentions_appelant Motif-juge","Motif-regle_de_droit Motif-2_faits Motif-2_texte Motif-2 Motif-faits Motif-juge","Dispositif-demandes_accessoires Dispositif-3","Motif-3_texte Motif-regle_de_droit Motif-appelant Motif-3 Motif-3_pretentions_appelant Motif-juge","Motif-1_texte Motif-regle_de_droit Motif-1 Motif-2_faits Motif-faits Motif-juge","Faits_et_procedure Moyens_et_pretentions_appelant","Dispositif-demandes_accessoires Dispositif-3 Dispositif-1","Entete_appelant References_decision_attaquee"],[10,24,6,20,7,15,39,46,42,49,60,53,40,37,65,50,19,23,25,19,44,55,24,55,55,60,14,53,32,35,56,24,49,26,37,142,109,93,62,45,5,6,117,25,8,52,72,75,45,62,141,90,77,16],[7748,384,1711,1031,1959,1897,3680,2023,1902,1963,282,417,960,1329,378,185,917,219,280,672,112,178,541,333,64,825,51,77,82,101,185,89,89,44,7,1,3,3,2,1,1,2,1,1,1,1,2,1,3,1,1,2,1,1],[23.66,1.17,5.23,3.15,5.98,5.79,11.24,6.18,5.81,5.99,0.86,1.27,2.93,4.06,1.15,0.56,2.8,0.67,0.86,2.05,0.34,0.54,1.65,1.02,0.2,2.52,0.16,0.24,0.25,0.31,0.56,0.27,0.27,0.13,0.02,0,0.01,0.01,0.01,0,0,0.01,0,0,0,0,0.01,0,0.01,0,0,0.01,0,0]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>paragraph_type_micro<\/th>\n      <th>nb_mots_moyen<\/th>\n      <th>nb_decisions<\/th>\n      <th>%<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3,4]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
 </div>
 <div id="repartition-de-la-difficulte-dannotation" class="section level2">
-<h2><span class="header-section-number">1.5</span> Répartition de la difficulté d’annotation</h2>
+<h2><span class="header-section-number">1.4</span> Répartition de la difficulté d’annotation</h2>
 <p>Les annotateurs ont noté la difficulté d’annoter chaque décision.<br />
 Les décisions jugées impossibles à annoter ont été exclues du <code>CSV</code>.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">datatable</span>(dt[, .(<span class="dt">nb_paragraphes =</span> .N), annotation_difficulty][, <span class="st">`</span><span class="dt">%</span><span class="st">`</span> <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="kw">round</span>(<span class="dv">100</span> <span class="op">*</span><span class="st"> </span>nb_paragraphes <span class="op">/</span><span class="st"> </span><span class="kw">sum</span>(nb_paragraphes), <span class="dv">2</span>)])</code></pre></div>
@@ -433,7 +437,7 @@ Les décisions jugées impossibles à annoter ont été exclues du <code>CSV</co
 <script type="application/json" data-for="htmlwidget-f474ad921ae63e0a53f4">{"x":{"filter":"none","data":[["1","2","3","4"],["Moyen","Facile","Difficile","n_a"],[12101,11751,8242,650],[36.96,35.89,25.17,1.99]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>annotation_difficulty<\/th>\n      <th>nb_paragraphes<\/th>\n      <th>%<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
 </div>
 <div id="groupement-de-certains-types" class="section level2">
-<h2><span class="header-section-number">1.6</span> Groupement de certains types</h2>
+<h2><span class="header-section-number">1.5</span> Groupement de certains types</h2>
 <p>Certains micro types de paragraphes sont regroupés.<br />
 Les paragraphes typés <code>n_a</code> sont conservés.<br />
 Leur retrait améliore considérablement la qualité des prédictions.<br />
@@ -474,7 +478,7 @@ dt &lt;-<span class="st"> </span><span class="kw">local</span>({
 })</code></pre></div>
 </div>
 <div id="preparation-des-donnees" class="section level2">
-<h2><span class="header-section-number">1.7</span> Préparation des données</h2>
+<h2><span class="header-section-number">1.6</span> Préparation des données</h2>
 <p>La transformation des paragraphes pour l’apprentissage consiste essentiellement à ajouter les paragraphes qui précèdent et suivent sous forme de contexte.<br />
 Présentement, les 3 paragraphes précédents et suivant sont ajoutés. Pour permettre au modèle de les distinguer du paragraphe à prédire, un préfixe est ajouté à chaque mot du contexte. Cette méthode augmente les résultats de plus de 10 points en fonction des tâches.</p>
 <p>L’introduction de chaque décision (dans notre cas les 20 premiers % de chaque décision) renseigne en général sur la nature des parties et sa thématique, pour cette raison elle est aussi ajoutée au contexte de chaque paragraphe.</p>
@@ -515,7 +519,7 @@ test_rows &lt;-<span class="st"> </span><span class="kw">seq</span>(<span class=
 <li>tous les paragraphes d’une même décision auraient le même contexte, ce contexte serait ignoré par l’algorithme.</li>
 </ul>
 <div id="paragraphe-avec-contexte-tel-que-vu-par-lalgorithme" class="section level3">
-<h3><span class="header-section-number">1.7.1</span> Paragraphe avec contexte tel que vu par l’algorithme</h3>
+<h3><span class="header-section-number">1.6.1</span> Paragraphe avec contexte tel que vu par l’algorithme</h3>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="co"># Original text, paragraphs 1 to 7</span>
 <span class="kw">print</span>(dt[<span class="dv">1</span><span class="op">:</span><span class="dv">7</span>, text])</code></pre></div>
 <pre><code>## [1] &quot;ch  civile a&quot;                                                                                                                                                                 
@@ -535,15 +539,26 @@ test_rows &lt;-<span class="st"> </span><span class="kw">seq</span>(<span class=
 <h1><span class="header-section-number">2</span> Apprentissages</h1>
 <div id="typage-des-paragraphes" class="section level2">
 <h2><span class="header-section-number">2.1</span> Typage des paragraphes</h2>
+<p>Deux typages peuvent être appris :</p>
+<ul>
+<li>un micro typage qui renseigne sur la nature du contenu de chaque paragraphe ;</li>
+<li>un typage davantage macro qui permet d’avoir une idée du plan de la décision.</li>
+</ul>
 <div id="micro-typage" class="section level3">
 <h3><span class="header-section-number">2.1.1</span> Micro typage</h3>
-<p>On essaye ci-dessous de deviner la nature du paragraphe.</p>
+<p>On essaye ci-dessous de deviner la nature du contenu du paragraphe.<br />
+Pour cela on va utiliser toutes les informations à notre disposition :</p>
+<ul>
+<li>le contenu du paragraphe ;</li>
+<li>ses différents contextes ;</li>
+<li>sa position.</li>
+</ul>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">learn_predict &lt;-<span class="st"> </span><span class="cf">function</span>(features){
   temp_file_train &lt;-<span class="st"> </span><span class="kw">tempfile</span>()
   temp_file_model &lt;-<span class="st"> </span><span class="kw">tempfile</span>()
   <span class="kw">writeLines</span>(dt[train_rows, <span class="kw">sample</span>(<span class="kw">get</span>(features))], <span class="dt">con =</span> temp_file_train)
   <span class="kw">execute</span>(<span class="dt">commands =</span> <span class="kw">c</span>(<span class="st">&quot;supervised&quot;</span>, <span class="st">&quot;-input&quot;</span>, temp_file_train, <span class="st">&quot;-output&quot;</span>, temp_file_model, <span class="st">&quot;-dim&quot;</span>, <span class="dv">10</span>, <span class="st">&quot;-lr&quot;</span>, <span class="dv">1</span>, <span class="st">&quot;-epoch&quot;</span>, <span class="dv">20</span>, <span class="st">&quot;-wordNgrams&quot;</span>, <span class="dv">2</span>, <span class="st">&quot;-verbose&quot;</span>, <span class="dv">0</span>))
-  model &lt;-<span class="st"> </span><span class="kw">load_model</span>(temp_file_model)
+  model &lt;-<span class="st"> </span><span class="kw">suppressMessages</span>(<span class="kw">load_model</span>(temp_file_model))
   predictions &lt;-<span class="st"> </span><span class="kw">predict</span>(model, <span class="dt">sentences =</span> dt[test_rows][, <span class="kw">get</span>(features)], <span class="dt">simplify =</span> <span class="ot">TRUE</span>)
   predicted_labels &lt;-<span class="st"> </span><span class="kw">names</span>(predictions)
   <span class="kw">invisible</span>(<span class="kw">assert_that</span>(<span class="kw">length</span>(test_rows) <span class="op">==</span><span class="st"> </span><span class="kw">length</span>(predicted_labels)))
@@ -558,52 +573,75 @@ display_prediction_accuracy &lt;-<span class="st"> </span><span class="cf">funct
 
 dt[, features_with_type_label <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="kw">paste</span>(<span class="kw">add_prefix</span>(<span class="st">&quot;__label__&quot;</span>, paragraph_type_micro_cleaned), features_without_label, features_intro, features_position)]
 dt[test_rows, predicted_paragraph_micro <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="kw">learn_predict</span>(<span class="dt">features =</span> <span class="st">&quot;features_with_type_label&quot;</span>)]</code></pre></div>
-<pre><code>## add .bin extension to the path</code></pre>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">display_prediction_accuracy</span>(<span class="dt">pred_of_label =</span> <span class="st">&quot;predicted_paragraph_micro&quot;</span>, <span class="dt">label_to_pred =</span> <span class="st">&quot;paragraph_type_micro_cleaned&quot;</span>)</code></pre></div>
 <div id="htmlwidget-e3b1a3fea7b58b984a25" style="width:100%;height:auto;" class="datatables html-widget"></div>
-<script type="application/json" data-for="htmlwidget-e3b1a3fea7b58b984a25">{"x":{"filter":"none","data":[["1","2","3","4","5","6","7","8","9","10","11","12"],["Motif","Entete_avocat","Moyens_et_pretentions","Entete","n_a","Entete_composition_de_la_cour","Dispositif_demandes_accessoires","Faits_et_procedure","References_decision_attaquee","Dispositif","Motif_texte","Entete_avec_avocat"],[53,21,42,6,8,15,20,38,23,20,59,24],[1366,189,649,686,1564,434,151,824,101,332,224,29],[94.36,91.01,89.37,88.34,84.72,82.49,81.46,77.06,71.29,70.48,43.3,41.38]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>paragraph_type_micro_cleaned<\/th>\n      <th>nb_mots_moyen<\/th>\n      <th>nb_decisions<\/th>\n      <th>accuracy<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3,4]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
-<p>En moyenne, le bon type est trouvé dans <strong>84.03%</strong> des <strong>6549</strong> paragraphes utilisés pour les tests.</p>
-<p>Les erreurs se décomposent de la façon suivante :</p>
+<script type="application/json" data-for="htmlwidget-e3b1a3fea7b58b984a25">{"x":{"filter":"none","data":[["1","2","3","4","5","6","7","8","9","10","11","12"],["Motif","Entete_avocat","Moyens_et_pretentions","Entete","n_a","Entete_composition_de_la_cour","Dispositif_demandes_accessoires","Faits_et_procedure","References_decision_attaquee","Dispositif","Entete_avec_avocat","Motif_texte"],[53,21,42,6,8,15,20,38,23,20,24,59],[1366,189,649,686,1564,434,151,824,101,332,29,224],[94.29,91.01,88.75,88.19,84.65,83.18,81.46,77.06,71.29,69.58,44.83,41.96]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>paragraph_type_micro_cleaned<\/th>\n      <th>nb_mots_moyen<\/th>\n      <th>nb_decisions<\/th>\n      <th>accuracy<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3,4]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
+<p>En moyenne, le bon type est trouvé dans <strong>83.89%</strong> des <strong>6549</strong> paragraphes utilisés pour les tests.</p>
+<p>Les prédictions se répartissent de la façon suivante :</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">display_errors &lt;-<span class="st"> </span><span class="cf">function</span>(type_to_predict, prediction) {
-  errors_dt &lt;-<span class="st"> </span>dt[test_rows][, <span class="st">`</span><span class="dt">to predict -&gt; prediction</span><span class="st">`</span> <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="kw">paste</span>(<span class="kw">get</span>(type_to_predict), <span class="st">&quot;-&gt;&quot;</span>, <span class="kw">get</span>(prediction))][<span class="kw">get</span>(type_to_predict) <span class="op">!=</span><span class="st"> </span><span class="kw">get</span>(prediction), .(<span class="dt">nb_erreurs =</span> .N), <span class="st">`</span><span class="dt">to predict -&gt; prediction</span><span class="st">`</span>][, <span class="st">`</span><span class="dt">%</span><span class="st">`</span> <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="dv">100</span> <span class="op">*</span><span class="st"> </span><span class="kw">round</span>(nb_erreurs <span class="op">/</span><span class="st"> </span><span class="kw">sum</span>(nb_erreurs), <span class="dv">4</span>)]
-  <span class="kw">datatable</span>(errors_dt[<span class="kw">order</span>(<span class="op">-</span>nb_erreurs)])
+  errors_dt &lt;-<span class="st"> </span>dt[test_rows][, .(<span class="dt">error =</span> <span class="kw">get</span>(type_to_predict) <span class="op">!=</span><span class="st"> </span><span class="kw">get</span>(prediction), <span class="dt">type_to_predict =</span> <span class="kw">get</span>(type_to_predict), <span class="dt">prediction =</span> <span class="kw">get</span>(prediction))]
+  corr_dt &lt;-<span class="st"> </span><span class="kw">dcast</span>(errors_dt, type_to_predict <span class="op">~</span><span class="st"> </span>prediction, <span class="dt">value.var =</span> <span class="st">&quot;error&quot;</span>, <span class="dt">fun.aggregate =</span> length)
+  rows &lt;-<span class="st"> </span>corr_dt[[<span class="dv">1</span>]]
+  corr_mat &lt;-<span class="st"> </span><span class="kw">as.matrix</span>(corr_dt[,<span class="op">-</span><span class="dv">1</span>])
+  <span class="kw">rownames</span>(corr_mat) &lt;-<span class="st"> </span>rows
+  corr_mat_percent &lt;-<span class="st"> </span>corr_mat <span class="op">/</span><span class="st"> </span><span class="kw">rowSums</span>(corr_mat)
+  <span class="kw">corrplot</span>(corr_mat_percent, <span class="dt">is.corr =</span> <span class="ot">FALSE</span>, <span class="dt">cl.lim =</span> <span class="kw">c</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="dt">tl.col =</span> <span class="st">&quot;black&quot;</span>, <span class="dt">tl.srt =</span> <span class="dv">45</span>, <span class="dt">method =</span> <span class="st">&quot;color&quot;</span>)
 }
+
 <span class="kw">display_errors</span>(<span class="dt">type_to_predict =</span> <span class="st">&quot;paragraph_type_micro_cleaned&quot;</span>, <span class="dt">prediction =</span> <span class="st">&quot;predicted_paragraph_micro&quot;</span>)</code></pre></div>
-<div id="htmlwidget-f6e6b0cb067ac237513b" style="width:100%;height:auto;" class="datatables html-widget"></div>
-<script type="application/json" data-for="htmlwidget-f6e6b0cb067ac237513b">{"x":{"filter":"none","data":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","46","47","48","49","50","51","52","53","54","55","56","57","58","59","60"],["Motif_texte -&gt; Motif","Faits_et_procedure -&gt; n_a","Entete_composition_de_la_cour -&gt; n_a","Entete -&gt; n_a","Faits_et_procedure -&gt; Moyens_et_pretentions","Motif -&gt; n_a","n_a -&gt; Dispositif","Dispositif -&gt; n_a","Faits_et_procedure -&gt; Motif","n_a -&gt; Faits_et_procedure","n_a -&gt; Entete","n_a -&gt; Motif","Dispositif -&gt; Faits_et_procedure","n_a -&gt; Entete_composition_de_la_cour","n_a -&gt; Moyens_et_pretentions","Moyens_et_pretentions -&gt; Faits_et_procedure","Moyens_et_pretentions -&gt; n_a","References_decision_attaquee -&gt; n_a","Moyens_et_pretentions -&gt; Motif","Dispositif_demandes_accessoires -&gt; Dispositif","Dispositif_demandes_accessoires -&gt; n_a","Entete_avec_avocat -&gt; Entete_avocat","Motif -&gt; Motif_texte","Motif -&gt; Moyens_et_pretentions","Dispositif -&gt; Motif","Entete_avec_avocat -&gt; Entete","Dispositif -&gt; Dispositif_demandes_accessoires","Entete_avocat -&gt; Entete","Motif_texte -&gt; n_a","Entete_avocat -&gt; Entete_avec_avocat","Dispositif -&gt; Moyens_et_pretentions","n_a -&gt; Dispositif_demandes_accessoires","Entete -&gt; Faits_et_procedure","References_decision_attaquee -&gt; Dispositif","Faits_et_procedure -&gt; Entete","Motif -&gt; Faits_et_procedure","Motif -&gt; Dispositif","Entete_avocat -&gt; Entete_composition_de_la_cour","Motif -&gt; Dispositif_demandes_accessoires","Dispositif_demandes_accessoires -&gt; Motif","Entete_avec_avocat -&gt; n_a","Entete_avocat -&gt; Faits_et_procedure","Motif_texte -&gt; Moyens_et_pretentions","Entete -&gt; Entete_composition_de_la_cour","Faits_et_procedure -&gt; Entete_composition_de_la_cour","Moyens_et_pretentions -&gt; Entete","Entete_composition_de_la_cour -&gt; References_decision_attaquee","n_a -&gt; References_decision_attaquee","Entete -&gt; Entete_avocat","References_decision_attaquee -&gt; Entete","Entete_composition_de_la_cour -&gt; Entete","Entete_composition_de_la_cour -&gt; Faits_et_procedure","Faits_et_procedure -&gt; Dispositif_demandes_accessoires","References_decision_attaquee -&gt; Entete_avec_avocat","n_a -&gt; Entete_avocat","Entete_avocat -&gt; n_a","n_a -&gt; Entete_avec_avocat","Dispositif -&gt; Entete","Dispositif_demandes_accessoires -&gt; Faits_et_procedure","Entete_avocat -&gt; Moyens_et_pretentions"],[120,75,73,73,58,52,52,50,49,47,43,33,30,29,28,25,24,23,18,15,10,9,9,8,7,6,5,5,5,5,5,4,4,4,4,3,3,3,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[11.47,7.17,6.98,6.98,5.54,4.97,4.97,4.78,4.68,4.49,4.11,3.15,2.87,2.77,2.68,2.39,2.29,2.2,1.72,1.43,0.96,0.86,0.86,0.76,0.67,0.57,0.48,0.48,0.48,0.48,0.48,0.38,0.38,0.38,0.38,0.29,0.29,0.29,0.19,0.19,0.19,0.19,0.19,0.19,0.19,0.19,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>to predict -&gt; prediction<\/th>\n      <th>nb_erreurs<\/th>\n      <th>%<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
+<p><img src="index_files/figure-html/error_type_micro-1.png" width="768" /></p>
+<blockquote>
+<p>Lignes = classe à prédire<br />
+Colonnes = classe prédite</p>
+</blockquote>
 </div>
 <div id="macro-typage" class="section level3">
 <h3><span class="header-section-number">2.1.2</span> Macro typage</h3>
-<p>Des tags macro sont présents dans le fichier.</p>
+<p>On essaye ci-dessous de deviner la partie de la décision à laquelle chaque paragraphe appartient.<br />
+Pour cela on va utiliser toutes les informations à notre disposition :</p>
+<ul>
+<li>le contenu du paragraphe ;</li>
+<li>ses différents contextes ;</li>
+<li>sa position.</li>
+</ul>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">dt[, features_with_type_macro <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="kw">paste</span>(<span class="kw">add_prefix</span>(<span class="st">&quot;__label__&quot;</span>, paragraph_type_macro), features_without_label, features_intro, features_position)]
 dt[test_rows, predicted_paragraph_macro <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="kw">learn_predict</span>(<span class="dt">features =</span> <span class="st">&quot;features_with_type_macro&quot;</span>)]</code></pre></div>
-<pre><code>## add .bin extension to the path</code></pre>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">display_prediction_accuracy</span>(<span class="dt">pred_of_label =</span> <span class="st">&quot;predicted_paragraph_macro&quot;</span>, <span class="dt">label_to_pred =</span> <span class="st">&quot;paragraph_type_macro&quot;</span>)</code></pre></div>
-<div id="htmlwidget-246a695e27233b7744db" style="width:100%;height:auto;" class="datatables html-widget"></div>
-<script type="application/json" data-for="htmlwidget-246a695e27233b7744db">{"x":{"filter":"none","data":[["1","2","3","4"],["Entete","Motif_de_la_decision","Expose_litige","Dispositif"],[11,50,38,17],[2513,1714,1564,758],[96.62,96.5,93.29,89.71]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>paragraph_type_macro<\/th>\n      <th>nb_mots_moyen<\/th>\n      <th>nb_decisions<\/th>\n      <th>accuracy<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3,4]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
-<p>En moyenne, le bon type macro est trouvé dans <strong>94.99%</strong> des <strong>6549</strong> paragraphes utilisés pour les tests.</p>
-<p>Les erreurs se décomposent de la façon suivante :</p>
+<div id="htmlwidget-f6e6b0cb067ac237513b" style="width:100%;height:auto;" class="datatables html-widget"></div>
+<script type="application/json" data-for="htmlwidget-f6e6b0cb067ac237513b">{"x":{"filter":"none","data":[["1","2","3","4"],["Entete","Motif_de_la_decision","Expose_litige","Dispositif"],[11,50,38,17],[2513,1714,1564,758],[96.74,96.5,93.41,89.84]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>paragraph_type_macro<\/th>\n      <th>nb_mots_moyen<\/th>\n      <th>nb_decisions<\/th>\n      <th>accuracy<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3,4]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
+<p>En moyenne, le bon type macro est trouvé dans <strong>95.08%</strong> des <strong>6549</strong> paragraphes utilisés pour les tests.</p>
+<p>Les prédictions se répartissent de la façon suivante :</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">  <span class="kw">display_errors</span>(<span class="dt">type_to_predict =</span> <span class="st">&quot;paragraph_type_macro&quot;</span>, <span class="dt">prediction =</span> <span class="st">&quot;predicted_paragraph_macro&quot;</span>)</code></pre></div>
-<div id="htmlwidget-0b71cc1f8f3420c0e55f" style="width:100%;height:auto;" class="datatables html-widget"></div>
-<script type="application/json" data-for="htmlwidget-0b71cc1f8f3420c0e55f">{"x":{"filter":"none","data":[["1","2","3","4","5","6","7","8","9","10","11","12"],["Expose_litige -&gt; Motif_de_la_decision","Entete -&gt; Expose_litige","Motif_de_la_decision -&gt; Expose_litige","Dispositif -&gt; Expose_litige","Dispositif -&gt; Motif_de_la_decision","Expose_litige -&gt; Entete","Entete -&gt; Motif_de_la_decision","Entete -&gt; Dispositif","Dispositif -&gt; Entete","Motif_de_la_decision -&gt; Entete","Motif_de_la_decision -&gt; Dispositif","Expose_litige -&gt; Dispositif"],[81,81,58,51,26,23,2,2,1,1,1,1],[24.7,24.7,17.68,15.55,7.93,7.01,0.61,0.61,0.3,0.3,0.3,0.3]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>to predict -&gt; prediction<\/th>\n      <th>nb_erreurs<\/th>\n      <th>%<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
+<p><img src="index_files/figure-html/error_type_macro-1.png" width="768" /></p>
+<blockquote>
+<p>Lignes = classe à prédire<br />
+Colonnes = classe prédite</p>
+</blockquote>
 </div>
 </div>
 <div id="partie-concernee-par-un-paragraphe" class="section level2">
 <h2><span class="header-section-number">2.2</span> Partie concernée par un paragraphe</h2>
-<p>On essaye de prédire qui est lié au paragraphe.<br />
-Le retrait de l’introduction et de la position semble aider (+5 points sur appelant et intimé).<br />
-Cela impliquerait un overfit ?</p>
+<p>Certains paragraphes rapportent les propos d’une des parties, dans d’autres il s’agit d’un rappel de la procédure ou c’est le magistrat qui s’exprime.<br />
+Ici on tente de deviner quelle partie au contentieux est concernée par chaque paragraphe.</p>
+<p>Pour cela on va utiliser certaines informations à notre disposition :</p>
+<ul>
+<li>le contenu du paragraphe ;</li>
+<li>ses différents contextes (pargraphes qui suivent ou qui précèdent).</li>
+</ul>
+<p>Le retrait de l’introduction et de la position semble aider (+5 points sur appelant et intimé).</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">dt[, features_with_side_label <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="kw">paste</span>(<span class="kw">add_prefix</span>(<span class="st">&quot;__label__&quot;</span>, side), features_without_label)]
 dt[test_rows, predicted_side <span class="op">:</span><span class="er">=</span><span class="st"> </span><span class="kw">learn_predict</span>(<span class="dt">features =</span> <span class="st">&quot;features_with_side_label&quot;</span>)]</code></pre></div>
-<pre><code>## add .bin extension to the path</code></pre>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">display_prediction_accuracy</span>(<span class="dt">pred_of_label =</span> <span class="st">&quot;predicted_side&quot;</span>, <span class="dt">label_to_pred =</span> <span class="st">&quot;side&quot;</span>)</code></pre></div>
-<div id="htmlwidget-aa186246d072cfcfcb70" style="width:100%;height:auto;" class="datatables html-widget"></div>
-<script type="application/json" data-for="htmlwidget-aa186246d072cfcfcb70">{"x":{"filter":"none","data":[["1","2","3"],["aucun","intime","appelant"],[29,24,30],[5058,735,756],[94.17,74.01,71.56]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>side<\/th>\n      <th>nb_mots_moyen<\/th>\n      <th>nb_decisions<\/th>\n      <th>accuracy<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3,4]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
-<p>En moyenne, la partie concernée par un paragraphe est trouvée dans <strong>89.3%</strong> des <strong>6549</strong> paragraphes utilisés pour les tests.</p>
-<p>Les erreurs se décomposent de la façon suivante :</p>
+<div id="htmlwidget-246a695e27233b7744db" style="width:100%;height:auto;" class="datatables html-widget"></div>
+<script type="application/json" data-for="htmlwidget-246a695e27233b7744db">{"x":{"filter":"none","data":[["1","2","3"],["aucun","intime","appelant"],[29,24,30],[5058,735,756],[93.87,73.06,71.3]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>side<\/th>\n      <th>nb_mots_moyen<\/th>\n      <th>nb_decisions<\/th>\n      <th>accuracy<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3,4]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
+<p>En moyenne, la partie concernée par un paragraphe est trouvée dans <strong>88.93%</strong> des <strong>6549</strong> paragraphes utilisés pour les tests.</p>
+<p>Les prédictions se répartissent de la façon suivante :</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">display_errors</span>(<span class="dt">type_to_predict =</span> <span class="st">&quot;side&quot;</span>, <span class="dt">prediction =</span> <span class="st">&quot;predicted_side&quot;</span>)</code></pre></div>
-<div id="htmlwidget-c1a1b5007938619c5a1c" style="width:100%;height:auto;" class="datatables html-widget"></div>
-<script type="application/json" data-for="htmlwidget-c1a1b5007938619c5a1c">{"x":{"filter":"none","data":[["1","2","3","4","5","6"],["aucun -&gt; appelant","aucun -&gt; intime","intime -&gt; appelant","appelant -&gt; aucun","appelant -&gt; intime","intime -&gt; aucun"],[177,118,115,110,105,76],[25.25,16.83,16.41,15.69,14.98,10.84]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>to predict -&gt; prediction<\/th>\n      <th>nb_erreurs<\/th>\n      <th>%<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[2,3]},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
+<p><img src="index_files/figure-html/error_side-1.png" width="768" /></p>
+<blockquote>
+<p>Lignes = classe à prédire<br />
+Colonnes = classe prédite</p>
+</blockquote>
 </div>
 </div>
 
