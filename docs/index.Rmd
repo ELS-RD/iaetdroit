@@ -226,9 +226,12 @@ learn_predict <- function(features){
 }
 
 display_prediction_accuracy <- function(pred_of_label, label_to_pred){
-    tab <- dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_decisions = .N, accuracy = round(100 * mean(get(label_to_pred) == get(pred_of_label)), 2)), get(label_to_pred)]
+    tab_recall <- dt[test_rows, .(nb_mots_moyen = round(mean(stri_count_words(text))), nb_items = .N, micro_recall = round(100 * mean(get(label_to_pred) == get(pred_of_label)), 2)), get(label_to_pred)]
+    tab_precision <- dt[test_rows, .(micro_precision = round(100 * mean(get(label_to_pred) == get(pred_of_label)), 2)), get(pred_of_label)]
+    tab <- merge(tab_recall, tab_precision, by = "get")
+    tab[, micro_f1 := round((2 * micro_recall * micro_precision) / (micro_recall + micro_precision), digits = 2)]
     setnames(tab, old = "get", label_to_pred)
-    datatable(tab[order(-accuracy)])
+    datatable(tab[order(-micro_f1)])
 }
 
 dt[, features_with_type_label := paste(add_prefix("__label__", paragraph_type_micro_cleaned), features_without_label, features_intro, features_position)]

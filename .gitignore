@@ -179,3 +179,5 @@ project/plugins/project/
 .Rproj.user
 *.csv
 *.Rproj
+# contain cache for RStudio Connect
+rsconnect
