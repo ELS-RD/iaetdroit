@@ -11,15 +11,16 @@ import regex
 import intervaltree as itree
 import itertools
 import csv
-from typing import TypeVar, Dict, Tuple, NamedTuple, Iterator, List, Set
+from typing import TypeVar, Dict, Tuple, NamedTuple, Iterator, List, Set, \
+    NewType
 
 # typing declarations
 IntervalTree = TypeVar('IntervalTree', bound=itree.IntervalTree)
 Interval = TypeVar('Interval', bound=itree.Interval)
 Namespace = TypeVar('Namespace', bound=argparse.Namespace)
-AnnType = str
-AnnDifficulty = str
-Filename = str
+AnnType = NewType('AnnType', str)
+AnnDifficulty = NewType('AnnDifficulty', str)
+Filename = NewType('Filename', str)
 
 # custom type
 AnnotatedLine = NamedTuple('AnnotatedLine', [('line_num', int),
@@ -30,18 +31,15 @@ AnnotationData = NamedTuple('AnnotationData',
                             [('annotation_difficulty', AnnType),
                              ('annotations', Annotations)])
 AnnotatedFiles = Dict[Filename, AnnotationData]
-
-# matches the annotation type, and all the beginning/ending offsets
-PATTERN_ANN = \
-    regex.compile(r'\t(?P<type>.+) ((?P<begin>\d+) (?P<end>\d+);?)+\t')
+CsvHeader = List[str]
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description='Generates a CSV file with '
-                    ' this format: [filename,line number,'
-                    ' annotation type(s),text]'
-                    ' (annotations are separated by spaces)')
+def parse_args(headers: CsvHeader) -> argparse.Namespace:
+    descr = ('Read *.ann and *.txt files annotated with Brat, and'
+             ' generates a CSV file (encoding: UTF-8) with this format:'
+             f' {",".join(headers)} (in types, values are separated by spaces)')
+
+    parser = argparse.ArgumentParser(description=descr)
     parser.add_argument('dir_base', nargs='?', default='.', type=str,
                         help='directory read recursively '
                              'to process *.ann and *.txt files.'
@@ -62,7 +60,8 @@ def parse_args() -> argparse.Namespace:
 
 def get_interval_ann(match) -> Tuple[int, int, set]:
     """Return a Interval corresponding to the 'match' pattern, using the min
-    and max of all the intervals"""
+    and max of all the intervals
+    """
 
     anns_type: Set = match.captures('type')[0]
     anns_begin: int = min(map(int, match.captures('begin')))
@@ -74,7 +73,8 @@ def get_interval_ann(match) -> Tuple[int, int, set]:
 def parse_annotations(filename: str, pattern) -> IntervalTree:
     """Return an ``IntervalTree`` for the annotations contained in this file
     (empty if there's an error).
-    pattern: regex used to parse each line of annotation."""
+    pattern: regex used to parse each line of annotation.
+    """
 
     interval_tree: IntervalTree = itree.IntervalTree()
 
@@ -97,7 +97,8 @@ def get_interval_offsets_txt(lines: List[str]) -> Iterator[Tuple[int, int]]:
     passed as parameter:
     [(0, n), (n, m), …]
     where the values are the character position of the beginning and end of
-    each line, counting from the first character of the file (start at 0)"""
+    each line, counting from the first character of the file (start at 0)
+    """
 
     idx_first_char = 0
     cumulative_lines_length = list(itertools.accumulate(list(map(len, lines))))
@@ -107,7 +108,8 @@ def get_interval_offsets_txt(lines: List[str]) -> Iterator[Tuple[int, int]]:
 
 
 def parse_text(filename: str) -> IntervalTree:
-    """Return an ``IntervalTree`` for this file (empty if there's an error)"""
+    """Return an ``IntervalTree`` for this file (empty if there's an error)
+    """
 
     try:
         with open(filename, 'r') as ftxt:
@@ -128,7 +130,8 @@ def annotate_txt(annotations: AnnotatedFiles,
                  no_type: AnnType) -> None:
     """Modify ``annotations``: adds annotations of ``file_text``, using the
     annotations and text intervals.
-    When no annotation exists, the annotation type is set to ``no_type``"""
+    When no annotation exists, the annotation type is set to ``no_type``
+    """
 
     ord_interval_tree_txt: List[IntervalTree] = sorted(interval_tree_txt)
     annotations[file_text] = AnnotationData(annotation_difficulty=no_type,
@@ -149,12 +152,10 @@ def annotate_txt(annotations: AnnotatedFiles,
             for line in all_lines:
                 types = get_types(idx_raw, interval_tree_ann, no_type,
                                   ord_interval_tree_txt)
-                # anns: Annotations =
                 annotations[file_text].annotations.append(
                     AnnotatedLine(line_num=idx_line,
                                   types=types,
                                   text=line.rstrip()))
-                # annotations[file_text]._replace(annotations=anns)
 
                 idx_raw += 1
                 idx_line += 1
@@ -186,8 +187,7 @@ def get_types(idx_raw: int, interval_tree_ann: IntervalTree,
 
 
 def merge_txt(raw_ann: AnnotationData, no_type: AnnType) -> AnnotationData:
-    """
-    Return a normalized (lines merged) version of ``raw_ann``:
+    """Return a normalized (lines merged) version of ``raw_ann``:
     '\n\n' in *.txt are the real lines, and are parsed as ''.
     So to create real lines, we merge all the strings between ''.
     """
@@ -223,7 +223,10 @@ def main():
     # - Processes recursively all the annotations (.ann) and text (.txt) files
     # in the data directory given as a parameter.
 
-    args: Namespace = parse_args()
+    headers: CsvHeader = ['filename', 'line_num', 'types',
+                          'annotation_difficulty',
+                          'text']
+    args: Namespace = parse_args(headers)
 
     file_csv: str = args.file_csv
     dir_base: pathlib.Path = pathlib.Path(args.dir_base).resolve()
@@ -251,7 +254,9 @@ def main():
             # IntervalTree allows to find character number intervals (from
             # annotations) that intersect character number intervals of a line
             # (from the original text)
-            interval_tree = parse_annotations(file_ann, PATTERN_ANN)
+            pattern = regex.compile(
+                r'\t(?P<type>.+) ((?P<begin>\d+) (?P<end>\d+);?)+\t')
+            interval_tree = parse_annotations(file_ann, pattern)
 
             file_text = os.path.splitext(file_ann)[0] + '.txt'
             interval_tree_txt = parse_text(file_text)
@@ -276,9 +281,7 @@ def main():
     try:
         with open(file_csv, 'w', newline='') as c:
             writer = csv.writer(c, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
-            writer.writerow(
-                ['filename', 'line_num', 'types', 'annotation_difficulty',
-                 'text'])
+            writer.writerow(headers)
             for filename in merged_ann:
                 annotation_difficulty = merged_ann[
                     filename].annotation_difficulty
@@ -288,6 +291,9 @@ def main():
                          annotation_difficulty,
                          ann.text])
         print(f'Result in "{file_csv}"')
+        if args.verbose:
+            print(f'CSV format:')
+            print(headers)
     except OSError as error:
         print(f'✘ Error while writing {file_csv}:\n{error}')
 

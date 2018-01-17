@@ -3,13 +3,14 @@ from codecs import open
 from os import path
 
 here = path.abspath(path.dirname(__file__))
+REQUIREMENTS = [i.strip() for i in open("requirements.txt").readlines()]
 
 # Get the long description from the README file
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(name='annotations2csv',
-      version='1.0.0',
+      version='1.0.1',
       description='Generate a CSV file from Brat annotations',
       url='https://ojeulin_els@bitbucket.org/ojeulin_els/poc-zonage-cours-appel.git',
       author='Olivier Jeulin',
@@ -25,6 +26,10 @@ setup(name='annotations2csv',
       keywords='Brat annotation CSV development',
       packages=find_packages(exclude=['contrib', 'doc', 'tests', 'data']),
       python_requires='>=3.6',
+      install_requires=[
+          'intervaltree',
+          'regex',
+          'pyfunctional'],
       entry_points={
           'console_scripts': [
               'sample=annotations2csv:main',
