@@ -14,6 +14,7 @@ import scala.collection.immutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.xml.{Elem, XML}
+import com.typesafe.config.ConfigFactory
 
 /**
   * Extract court of appeal decisions.
@@ -30,25 +31,23 @@ object LoadDecisionsToBratFiles extends App {
         .withSupervisionStrategy(Common.printException)
     )
 
-  println(new File(".").getAbsolutePath)
+  val config = ConfigFactory.load
 
   private val extension = "\\.[^.]*$".r
-
-  // TODO move path to configuration file
-  private val destinationFolder = new File(
-    "./court_of_appeal_brat_annotation/")
+  private val destinationFolder = new File(config.getString("output_path"))
 
   FileUtil.deleteFileRecursively(destinationFolder)
 
-  private val workers     = 32 // TODO move to parameters
-  private val maxLineSize = 80 // TODO move to parameters
+  private val workers     = config.getInt("nb_worker")
+  private val maxLineSize = config.getInt("max_line_size")
+  private val minYear = config.getInt("min_year")
+
 
   private val files: Iterator[File] =
     Files
-    // TODO move to parameter file
-      .find(Paths.get("/home/benesty_local/workspace/justice-data/data/juri/"),
+      .find(Paths.get(config.getString("input_path")),
             999,
-            (path, bfa) => path.toString.endsWith(".xml"))
+            (path, _) => path.toString.endsWith(".xml"))
       .iterator()
       .asScala
       .map(_.toFile)
@@ -58,8 +57,7 @@ object LoadDecisionsToBratFiles extends App {
     .mapAsyncUnordered(workers) { file =>
       Future { AppealCourtContainer(file) }
     }
-    // it has been decided to annotate 2016 decisions only
-    .filter(_.date.getYear == 2016)
+    .filter(_.date.getYear == minYear)
     .grouped(10)
     .sliding(2)
     .map {
@@ -115,13 +113,7 @@ protected case class AppealCourtContainer(file: File) {
     paragraphs
       .filter(_.nonEmpty)
       .flatMap(_.split("\n").filter(_.nonEmpty).map(_.trim))
-      .map(
-        t =>
-          Common
-            .wordWrap(t.trim, maxLineSize)
-            .filter(_.nonEmpty)
-            .map(_.trim)
-            .mkString("\n"))
+      .map(text => Common.splitLines(text, maxLineSize))
       .filter(_.nonEmpty)
       .mkString("\n\n")
 }
