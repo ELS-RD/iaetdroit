@@ -10,11 +10,17 @@ so the line count is different in the CSV than the original file.
 
 ## Requirements
 Tested with:
+
 * python ≥ 3.6
 * GNU/Linux
 
-## Example
-To see how the program works, execute
-`./run.sh`.
+## Typing
+You can check the typing with:
 
+`mypy --ignore-missing-imports annotations2csv/annotations2csv.py`
+
+## Example
+* To see how the program works, execute `./run.sh`.
 It reads files from the sample `data` directory.
+* To process all the files of the dataset, we used:
+`python annotations2csv/annotations2csv.py  /some-input-dir/brat_6-12 -o /some-output-dir/annotations.csv`
