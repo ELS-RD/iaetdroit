@@ -4,7 +4,6 @@ import java.time.format.DateTimeFormatter
 
 import akka.stream.Supervision
 
-
 object Common {
   // Strategy to print Exception in Akka
   lazy val printException: Supervision.Decider = {
@@ -37,7 +36,7 @@ object Common {
     * @param maxLength maximum size of each line (<=), if 0, no effect
     * @return
     */
-  def splitLines(paragraph: String, maxLength: Int): String = {
+  def splitLines(paragraph: String, maxLength: Int): String =
     if (maxLength > 0) {
       wordWrap(paragraph.trim, maxLength)
         .filter(_.nonEmpty)
@@ -46,7 +45,4 @@ object Common {
     } else {
       paragraph
     }
-  }
-
-
 }

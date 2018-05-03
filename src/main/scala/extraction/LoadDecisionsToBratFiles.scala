@@ -33,15 +33,14 @@ object LoadDecisionsToBratFiles extends App {
 
   val config = ConfigFactory.load
 
-  private val extension = "\\.[^.]*$".r
+  private val extension         = "\\.[^.]*$".r
   private val destinationFolder = new File(config.getString("output_path"))
 
   FileUtil.deleteFileRecursively(destinationFolder)
 
   private val workers     = config.getInt("nb_worker")
   private val maxLineSize = config.getInt("max_line_size")
-  private val minYear = config.getInt("min_year")
-
+  private val minYear     = config.getInt("min_year")
 
   private val files: Iterator[File] =
     Files
@@ -57,7 +56,7 @@ object LoadDecisionsToBratFiles extends App {
     .mapAsyncUnordered(workers) { file =>
       Future { AppealCourtContainer(file) }
     }
-    .filter(_.date.getYear == minYear)
+    .filter(_.date.getYear >= minYear) // for the annotation it was == 2016
     .grouped(10)
     .sliding(2)
     .map {
