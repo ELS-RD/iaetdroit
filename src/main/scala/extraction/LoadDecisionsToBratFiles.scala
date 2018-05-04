@@ -41,6 +41,7 @@ object LoadDecisionsToBratFiles extends App {
   private val workers     = config.getInt("nb_worker")
   private val maxLineSize = config.getInt("max_line_size")
   private val minYear     = config.getInt("min_year")
+  private val maxYear     = config.getInt("max_year")
 
   private val files: Iterator[File] =
     Files
@@ -56,7 +57,7 @@ object LoadDecisionsToBratFiles extends App {
     .mapAsyncUnordered(workers) { file =>
       Future { AppealCourtContainer(file) }
     }
-    .filter(_.date.getYear >= minYear) // for the annotation it was == 2016
+    .filter(d => d.date.getYear >= minYear && d.date.getYear <= maxYear)
     .grouped(10)
     .sliding(2)
     .map {
